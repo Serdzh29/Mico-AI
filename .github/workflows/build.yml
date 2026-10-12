@@ -1,0 +1,38 @@
+name: Build Mico.exe
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build Mico.exe
+        run: >
+          python -m PyInstaller --noconsole --onefile --clean --name Mico
+          --icon assets/mico.ico
+          --add-data "assets;assets" --add-data "knowledge;knowledge" --add-data "data;data"
+          --hidden-import win32crypt --hidden-import win32com.client --hidden-import pythoncom
+          --hidden-import pywintypes --exclude-module tkinter main.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mico
+          path: dist/Mico.exe
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Mico.exe
