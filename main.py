@@ -46,7 +46,7 @@ try:
 except Exception:
     pass
 _stage("модуль main загружен")
-import html, json, os, subprocess, sys, threading, time
+import html, json, os, subprocess, sys, threading, time, webbrowser
 from types import SimpleNamespace
 from urllib.parse import unquote
 from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, Qt, QTimer, QUrl, pyqtSignal
@@ -57,7 +57,7 @@ from PyQt6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox, Q
                              QVBoxLayout, QScrollArea, QSizePolicy,
                              QWidget)
 import psutil
-import actions, autostart, betaprogram, menu_items, features, capabilities, chips, commands, custom, feedback, greeting, hotkeys, breaks, indexer, initiative, mailreport, report, reminders, sleepmode, theme, version, windows_info
+import actions, autostart, betaprogram, menu_items, features, capabilities, chips, commands, custom, feedback, greeting, hotkeys, breaks, indexer, initiative, mailreport, report, reminders, sleepmode, theme, updatecheck, version, windows_info
 import winctl as W
 from actions import Reply
 from blob import Blob
@@ -84,6 +84,7 @@ DEFAULTS = {
     "hotkey_chat": "ctrl+alt+m", "hotkey_translate": "ctrl+alt+t",   # глобальные сочетания (нужен перезапуск)
     "proactive_breaks": True, "proactive_break_min": 60,   # напоминание о перерыве
     "quiet_mode": False,                  # режим тишины
+    "update_check": True, "update_checked_at": 0,   # проверка новой версии раз в сутки (только сообщает)
     "index_on": True,                              # индекс компьютера (имена и пути, без содержимого)
     "custom_phrases": [],                          # свои фразы-команды: [{"say": "...", "do": "...; ..."}]
     "greet_items": ["recap", "weather"],           # что показывать при входе (до 3), см. greeting.py
@@ -701,6 +702,9 @@ class SettingsDialog(QDialog):
         self.quiet = WrapCheck("Режим тишины: без приветствий, инициативы и подсказок")
         self.quiet.setChecked(cfg.get("quiet_mode", False))
         f.addRow(self._hc(self.quiet, "quiet"))
+        self.updchk = WrapCheck("Проверять новые версии Mico при запуске (раз в сутки, без скачивания)")
+        self.updchk.setChecked(cfg.get("update_check", True))
+        f.addRow(self.updchk)
         f.addRow(QLabel("<b>Меню по правому щелчку</b>"))
         chosen = [i for i in cfg.get("menu_items", menu_items.DEFAULT_ON) if i in menu_items.LABELS]
         self.mlist = QListWidget()
@@ -1158,7 +1162,7 @@ class SettingsDialog(QDialog):
             self.join_request = want_beta
         elif was_beta and not want_beta:
             self.cfg["update_channel"] = "stable"       # бету выключили — дальше обычный стабильный канал
-        self.cfg.update(quiet_mode=self.quiet.isChecked())
+        self.cfg.update(quiet_mode=self.quiet.isChecked(), update_check=self.updchk.isChecked())
         self.cfg.update(sleep_after_min=self.sleep_min.value())
         self.cfg.update(proactive_breaks=self.pbr.isChecked(),
                         proactive_break_min=self.pbr_min.value())
@@ -1196,6 +1200,7 @@ class Bus(QObject):
     index_text = pyqtSignal(str)        # строка прогресса индексации под чатом
     hotkey = pyqtSignal(int)            # нажата глобальная горячая клавиша (из фонового потока)
     info = pyqtSignal(str)              # погода и прочие сообщения из фоновых потоков
+    update_found = pyqtSignal(object)   # найдена новая версия Mico (словарь с номером и адресом страницы)
 
 
 def main():
@@ -1303,6 +1308,27 @@ def main():
         elif hid == 2:
             translate_selection()
     bus.hotkey.connect(on_hotkey)
+
+    def offer_update(info):
+        """Новая версия: спрашиваем один раз за запуск. Mico только открывает страницу, скачивать — тебе."""
+        if cfg.get("quiet_mode"):
+            return
+        if _box(QMessageBox.Icon.Information, "Новая версия Mico", updatecheck.offer_text(info),
+                "Открыть страницу", "Позже"):
+            webbrowser.open(info["url"])
+    bus.update_found.connect(offer_update)
+
+    def start_update_check():
+        """Фоновый запрос к GitHub: интерфейс не ждёт, без сети тихо пропускаем."""
+        def work():
+            try:
+                info = updatecheck.check(cfg)
+                save_cfg(cfg)
+            except Exception:
+                return
+            if info:
+                bus.update_found.emit(info)
+        threading.Thread(target=work, daemon=True).start()
     hk = hotkeys.HotkeyThread({1: cfg.get("hotkey_chat", "ctrl+alt+m"),
                                2: cfg.get("hotkey_translate", "ctrl+alt+t")}, bus.hotkey.emit)
     hk.start()
@@ -1629,6 +1655,7 @@ def main():
     if not store.load_index() and cfg.get("index_on", True) and not cfg.get("quiet_mode"):
         QTimer.singleShot(4000, start_index)          # первый запуск: индексируем компьютер в фоне
     QTimer.singleShot(2600, whats_new)
+    QTimer.singleShot(7000, start_update_check)     # после приветствия, в фоне
 
     def show_tour():
         panel.show_near(activate=False)
