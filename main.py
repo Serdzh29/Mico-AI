@@ -763,6 +763,8 @@ class SettingsDialog(QDialog):
         self.slc.currentIndexChanged.connect(self.live_placement)
         f.addRow("Во сне прячется", self.slc)
         pp = QWidget()                                  # отдельная вкладка: программа предварительной оценки
+        self._beta_page = pp                            # держим ссылку: в стабильной сборке вкладки нет,
+                                                        # и без ссылки pp удалялся бы вместе с beta_pick
         fp = QFormLayout(pp)
         self.beta_pick = WrapCheck("Участвовать в программе: бета-канал (новые функции раньше, возможны сбои)")
         self.beta_pick.setChecked(cfg.get("update_channel") == "beta")

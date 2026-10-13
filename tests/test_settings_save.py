@@ -121,4 +121,10 @@ f._apply = lambda: (_ for _ in ()).throw(KeyError("бракованное пол
 warned.clear()
 M.SettingsDialog.accept(f)
 check(warned and "бракованное поле" in str(warned[-1]), "ошибка должна показываться пользователю")
+
+# 5. регрессия: в стабильной сборке вкладки «Бета» нет, но её флажок читается при сохранении —
+#    контейнер вкладки должен жить вместе с окном, иначе Qt удаляет флажок («QCheckBox has been deleted»)
+init_src = open(_os.path.join(ROOT, "main.py"), encoding="utf-8").read().split("class SettingsDialog")[1].split("def ")[1]
+check("self._beta_page = pp" in init_src or "self._beta_page = pp" in open(_os.path.join(ROOT, "main.py"), encoding="utf-8").read(),
+      "контейнер вкладки беты должен сохраняться в self")
 print("ALL OK")
