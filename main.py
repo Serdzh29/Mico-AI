@@ -273,7 +273,16 @@ class Panel(QWidget):
         self.setFixedSize(round(360 * k), round(430 * k))
         self.theme()
         if self.isVisible():
-            self.reposition()
+            self.keep_on_screen()                   # не переставляем чат заново: он не должен прыгать при настройках
+
+    def keep_on_screen(self):
+        """Удерживает чат на экране, не меняя его положения, если он уже в пределах экрана."""
+        scr = QGuiApplication.screenAt(self.geometry().center()) or QGuiApplication.primaryScreen()
+        g = scr.availableGeometry()
+        x = min(max(self.x(), g.left()), g.right() - self.width())
+        y = min(max(self.y(), g.top()), g.bottom() - self.height())
+        if (x, y) != (self.x(), self.y()):
+            self.move(x, y)
 
     def _typed(self, _):
         if self.queue:                                 # человек начал печатать — не дочитываем ответ

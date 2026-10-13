@@ -527,11 +527,11 @@ class Blob(QWidget):
 
     def _overlays(self, p, cx, cy, R, mood, t):
         p.setPen(Qt.PenStyle.NoPen)
-        if mood == "thinking":                                 # три прыгающие точки «думаю…»
-            for i in range(3):
-                bounce = max(0, math.sin(t * 6 - i * 0.9)) * R * 0.12
-                p.setBrush(QColor(90, 90, 90, 210))
-                p.drawEllipse(QPointF(cx + R * 0.45 + i * R * 0.22, cy - R * 1.12 - bounce), R * 0.07, R * 0.07)
+        if mood == "thinking":                                 # три прыгающие точки «думаю…» — внутри тела,
+            for i in range(3):                                 # чтобы не перекрывать чат над Mico
+                bounce = max(0, math.sin(t * 6 - i * 0.9)) * R * 0.08
+                p.setBrush(QColor(90, 90, 90, 200))
+                p.drawEllipse(QPointF(cx + R * 0.22 + i * R * 0.2, cy + R * 0.42 - bounce), R * 0.06, R * 0.06)
         elif mood == "sleepy":
             p.setPen(QColor(110, 110, 140, 200))
             for k in range(3):
