@@ -582,3 +582,65 @@ def restart_explorer():
     run_quiet("taskkill", "/f", "/im", "explorer.exe")
     subprocess.Popen(["explorer.exe"], creationflags=NOWIN)
     return True, ""
+
+
+# ============================ Рабочее место и история копирования (бета) ============================
+def visible_apps():
+    """Программы с видимыми окнами: [{'proc', 'exe', 'title'}]. Окна самого Mico не считаются."""
+    import win32gui, win32process, psutil
+    me, res = os.getpid(), []
+
+    def cb(hwnd, _):
+        if not win32gui.IsWindowVisible(hwnd) or not win32gui.GetWindowText(hwnd):
+            return
+        pid = win32process.GetWindowThreadProcessId(hwnd)[1]
+        if pid == me:
+            return
+        try:
+            p = psutil.Process(pid)
+            res.append({"proc": p.name().lower(), "exe": p.exe(), "title": win32gui.GetWindowText(hwnd)})
+        except psutil.Error:
+            pass
+    win32gui.EnumWindows(cb, None)
+    return res
+
+
+def running_names():
+    """Имена всех запущенных процессов в нижнем регистре: чтобы не открывать дважды то, что уже открыто."""
+    import psutil
+    return {(p.info.get("name") or "").lower() for p in psutil.process_iter(["name"])}
+
+
+def process_of(hwnd):
+    """Имя процесса окна (для истории копирования: из менеджеров паролей не сохраняем)."""
+    import win32process, psutil
+    try:
+        return psutil.Process(win32process.GetWindowThreadProcessId(hwnd)[1]).name().lower()
+    except Exception:
+        return ""
+
+
+def launch(exe):
+    """Открывает программу, которую пользователь подтвердил. Без прав администратора."""
+    subprocess.Popen([exe], close_fds=True, creationflags=NOWIN)
+    return True
+
+
+# ============================ Здоровье ПК, диски (бета) ============================
+def disk_usage(path):
+    import shutil
+    return shutil.disk_usage(path)
+
+
+def boot_time():
+    import psutil
+    return psutil.boot_time()
+
+
+def defender_on():
+    """Защита Windows в реальном времени: True / False / None (не удалось узнать)."""
+    ok, out = ps("(Get-MpComputerStatus).RealTimeProtectionEnabled", 15)
+    if not ok:
+        return None
+    word = out.strip().split()[-1].lower() if out.strip() else ""
+    return {"true": True, "false": False}.get(word)

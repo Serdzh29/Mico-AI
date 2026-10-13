@@ -66,6 +66,7 @@ check(ok and xml_state["exists"], msg)
 xml = open(_os.path.join(_tmp, "Mico", "mico_task.xml"), encoding="utf-16").read()
 check("<Delay>PT10S</Delay>" in xml, "задержка после входа")
 check("SessionUnlock" in xml and "LogonTrigger" in xml, "запуск при входе и разблокировке")
+check("<RunLevel>HighestAvailable</RunLevel>" in xml, "задача стартует с наивысшими правами пользователя (иначе падает с 0x800702E4)")
 check(A.status()[0] is True, "после установки задача видна")
 
 # выключение задачи, которой нет, — не ошибка (раньше здесь было предупреждение)

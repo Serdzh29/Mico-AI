@@ -1,7 +1,7 @@
 {
-  "checked": "2026-10-12",
-  "note": "Только проверенные сведения. Сборка без highlights означает: список изменений в моих данных пока не проверен. Сборки «Future Platforms» (серия 29600) сюда не входят: это не версия Windows 11.",
-  "lifecycle_source": "Microsoft: Windows 11 lifecycle for Home and Pro / Enterprise and Education; проверено по страницам Microsoft и изданиям Pureinfotech, BleepingComputer, Lansweeper, Windows Central (сентябрь–октябрь 2026)",
+  "checked": "2026-10-13",
+  "note": "Только сведения с официальной страницей Microsoft. Записи с official=false не подтверждены Microsoft и не должны выдаваться за факт. Сборки «Future Platforms» (серия 29600) сюда не входят: это не версия Windows 11.",
+  "lifecycle_source": "Microsoft: центр сообщений Microsoft 365 (MC1482225, 29 сентября 2026); блог Windows Insider (19 июня и 27 августа 2026); Microsoft Learn: жизненный цикл Windows 11 Home and Pro. Сторонние сайты в эту таблицу не включены, кроме явно помеченных как не подтверждённые.",
   "lifecycle": [
     {
       "version": "21H2",
@@ -21,7 +21,8 @@
     {
       "version": "24H2",
       "home_pro_end": "2026-10-13",
-      "enterprise_end": "2027-10-12"
+      "enterprise_end": "2027-10-12",
+      "note": "Обновления для Home и Pro заканчиваются 13 октября 2026 (сноска в блоге Windows Insider, 27 августа 2026); в таблице Microsoft Learn — 14 октября 2026 в 06:59 по тихоокеанскому времени."
     },
     {
       "version": "25H2",
@@ -36,7 +37,9 @@
     {
       "version": "26H2",
       "released": "2026-09-29",
-      "note": "срок поддержки в моих данных пока не проверен"
+      "source": "Microsoft: центр сообщений MC1482225 (29 сентября 2026)",
+      "home_pro_end": null,
+      "note": "Срок поддержки в официальной таблице, которую я нашёл, не подтверждён. Не называть дату как точную."
     }
   ],
   "builds": [
@@ -45,28 +48,32 @@
       "version": "21H2",
       "channel": "release",
       "source": "Microsoft: Windows 11 release information",
-      "highlights": []
+      "highlights": [],
+      "tier": "official"
     },
     {
       "build": "22621",
       "version": "22H2",
       "channel": "release",
       "source": "Microsoft: Windows 11 release information",
-      "highlights": []
+      "highlights": [],
+      "tier": "official"
     },
     {
       "build": "22631",
       "version": "23H2",
       "channel": "release",
       "source": "Microsoft: Windows 11 release information",
-      "highlights": []
+      "highlights": [],
+      "tier": "official"
     },
     {
       "build": "26100",
       "version": "24H2",
       "channel": "release",
       "source": "Microsoft: Windows 11 release information",
-      "highlights": []
+      "highlights": [],
+      "tier": "official"
     },
     {
       "build": "26200",
@@ -76,7 +83,8 @@
       "source": "Microsoft: Windows 11 release information (GA 2025-09-30); Pureinfotech",
       "highlights": [
         "Пакет включения поверх 24H2: по объявлению Microsoft новых функций по сравнению с 24H2 не добавляет."
-      ]
+      ],
+      "tier": "official"
     },
     {
       "build": "26200.6899",
@@ -88,7 +96,8 @@
         "Интеграция менеджера паспортных ключей (passkeys) через сторонние плагины.",
         "Новые сочетания клавиш для вставки дефисов.",
         "Изменения в «Общем доступе» (Windows Share) и в расширенных параметрах."
-      ]
+      ],
+      "tier": "community"
     },
     {
       "build": "26220.8690",
@@ -96,24 +105,28 @@
       "channel": "beta",
       "date": "2026-06-19",
       "source": "Windows Insider Blog, 19 июня 2026",
-      "highlights": []
+      "highlights": [],
+      "tier": "official"
     },
     {
       "build": "26220.9223",
       "version": "25H2",
       "channel": "beta",
       "source": "форум ElevenForum (отчёт о сборке Beta)",
-      "highlights": []
+      "highlights": [],
+      "tier": "community"
     },
     {
       "build": "26300.8697",
       "version": "26H2",
       "channel": "experimental",
       "date": "2026-06-19",
-      "source": "Windows Insider Blog, 19 июня 2026; Windows Central",
+      "source": "Windows Insider Blog, 19 июня 2026 (blogs.windows.com/windows-insider/2026/06/19/...)",
       "highlights": [
         "Новая шапка в «Конфиденциальность и безопасность» со входом в «Безопасность Windows»."
-      ]
+      ],
+      "official": true,
+      "tier": "official"
     },
     {
       "build": "26300.8758",
@@ -122,35 +135,41 @@
       "source": "Windows Central",
       "highlights": [
         "В настройках панели задач появился отдельный пункт, чтобы сделать панель меньше."
-      ]
+      ],
+      "tier": "community"
     },
     {
       "build": "26300.9278",
       "version": "26H2",
       "channel": "release_preview",
       "date": "2026-08-27",
-      "source": "Windows Insider Blog, 27 августа 2026",
-      "highlights": []
+      "source": "Windows Insider Blog, 27 августа 2026 (blogs.windows.com/windows-insider?p=179146)",
+      "highlights": [],
+      "official": true,
+      "tier": "official"
     },
     {
       "build": "26340.9233",
       "version": "26H2",
       "channel": "experimental",
       "source": "форум ElevenForum (отметка «26H2 Experimental»)",
-      "highlights": []
+      "highlights": [],
+      "tier": "community"
     },
     {
       "build": "26300.9457",
       "version": "26H2",
       "channel": "release",
       "date": "2026-09-29",
-      "source": "WindowsMode: Windows 11 26H2 — что нового",
+      "source": "WindowsMode (сайт-пересказ). Не подтверждено Microsoft: в официальных источниках номер сборки выпуска не совпал",
       "highlights": [
         "Резервное копирование параметров.",
         "Действия приложений на панели задач.",
         "Более быстрый Проводник (раздел «Главная»).",
         "Меньше перезагрузок при обновлениях."
-      ]
+      ],
+      "official": false,
+      "tier": "community"
     },
     {
       "build": "28000",
@@ -159,7 +178,8 @@
       "source": "Microsoft: Windows 11 release information",
       "highlights": [
         "Отдельная версия для новых устройств на Arm. По данным Microsoft, как обычное обновление на уже установленные 24H2 и 25H2 её не предлагают."
-      ]
+      ],
+      "tier": "official"
     },
     {
       "build": "28020.2308",
@@ -167,7 +187,8 @@
       "channel": "beta",
       "date": "2026-06-19",
       "source": "Windows Insider Blog, 19 июня 2026",
-      "highlights": []
+      "highlights": [],
+      "tier": "official"
     },
     {
       "build": "28120.2315",
@@ -175,7 +196,8 @@
       "channel": "experimental",
       "date": "2026-06-19",
       "source": "Windows Insider Blog, 19 июня 2026",
-      "highlights": []
+      "highlights": [],
+      "tier": "official"
     }
   ]
 }

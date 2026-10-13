@@ -144,7 +144,8 @@ def _support_line(version, group, today, data):
 
 
 def _line(build):
-    return f"{build.get('version')}, сборка {build['build']} ({CHANNELS.get(build.get('channel'), 'проверено')})"
+    tag = "" if build.get("tier", "official") == "official" else ", по сторонним данным, не Microsoft"
+    return f"{build.get('version')}, сборка {build['build']} ({CHANNELS.get(build.get('channel'), 'проверено')}{tag})"
 
 
 def _describe(build):

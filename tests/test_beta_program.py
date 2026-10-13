@@ -99,7 +99,7 @@ def test_join_flag_detected():
 def test_wizard_has_no_beta_checkbox_and_no_consent_bypass():
     src = open(os.path.join(ROOT, "installer.py"), encoding="utf-8").read()
     assert "opt_beta" not in src
-    assert re.search(r'update_channel="stable"', src)
+    assert "update_channel=version.BUILD_CHANNEL" in src      # канал записывает сборка, а не константа
     assert "update_channel=\"beta\" if beta" not in src
 
 

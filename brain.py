@@ -1,8 +1,9 @@
 """Мозг Mico: локальные модели через Ollama (только 127.0.0.1) + маршрутизация запросов."""
-import base64, html as html_mod, io, json, re, time
+import base64, html as html_mod, io, json, os, re, time
 import mss, requests, win32gui
 from PIL import Image
-import actions, capabilities, commands, components, custom, dialog, diagnose, features, identity, indexer, knowledge, notes, osagent, planner, pomodoro, typo, windows_info
+import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, indexer, knowledge, notes, osagent, planner, pomodoro, schedule, sorter, todo, typo, windows_info, workspace
+import winctl as W
 from actions import Reply
 from emotions import detect_emotion, split_mood
 
@@ -353,6 +354,174 @@ class Brain:
         task = "Переведи на русский (если текст уже русский — на английский). Только перевод."
         return self._chat(task + "\n\n" + text[:6000], self.cfg["text_model"])
 
+    def _count_use(self, feature):
+        """Считаем, сколько раз пользовались бета-функцией. Только число: ни текста, ни содержимого."""
+        use = self.cfg.setdefault("beta_usage", {})
+        use[feature] = use.get(feature, 0) + 1
+        self.save_cfg()
+
+    def _beta_command(self, q, ql):
+        """Бета-функции: рабочее место, история копирования, итог дня. None — это не про них."""
+        if features.enabled("workspace", self.cfg):
+            kind = workspace.command(ql)
+            if kind:
+                self._count_use("workspace")
+            if kind == "save":
+                apps = workspace.save(self.cfg, W.visible_apps())
+                self.save_cfg()
+                if not apps:
+                    return Reply("Не вижу открытых программ, которые можно запомнить 🤔", "curious")
+                return Reply(f"Запомнил рабочее место: {workspace.names(apps)} 🗂", "happy")
+            if kind == "restore":
+                if not workspace.saved_apps(self.cfg):
+                    return Reply("Рабочее место ещё не запомнено. Открой нужные программы и скажи «запомни рабочее место».",
+                                 "curious")
+                todo = workspace.plan_restore(self.cfg, W.running_names())
+                if not todo:
+                    return Reply("Всё запомненное уже открыто 👍", "happy")
+                return commands._ask(f"Открыть {len(todo)}: {workspace.names(todo)}?",
+                                     lambda: self._open_workspace(todo))
+        if features.enabled("clipboard_search", self.cfg):
+            c = clipbuf.command(ql)
+            if c:
+                self._count_use("clipboard_search")
+                if c[0] == "forget":
+                    self.store.forget_clips()
+                    return Reply("Историю копирования очистил 🧹", "happy")
+                query = c[1].lower()
+                hits = [(ts, t) for ts, t in self.store.list_clips() if not query or query in t.lower()][:5]
+                if not hits:
+                    return Reply("Ничего не нашёл в истории копирования 🤔" if query
+                                 else "История копирования пока пуста.", "curious")
+                fmt_ts = lambda ts: time.strftime("%d.%m %H:%M", time.localtime(ts))
+                return Reply("Вот что нашёл:\n" + clipbuf.format_hits(hits, fmt_ts), "happy")
+        more = self._beta_more(q, ql)
+        if more:
+            return more
+        if features.enabled("day_summary", self.cfg):
+            d = daysum.command(ql)
+            if d:
+                self._count_use("day_summary")
+                if d[0] == "schedule":
+                    self.cfg["day_summary_at"] = d[1]
+                    self.save_cfg()
+                    if not d[1]:
+                        return Reply("Хорошо, итог дня больше не присылаю 👌", "happy")
+                    return Reply(f"Буду присылать итог дня в {d[1]} 🌙", "happy")
+                return Reply(daysum.build(self.store, time.time()), "happy")
+        return None
+
+    def _beta_more(self, q, ql):
+        """Вторая партия бета-функций: здоровье ПК, итог недели, список дел, очистка, порядок в загрузках, расписание."""
+        if features.enabled("health", self.cfg) and health.command(ql):
+            self._count_use("health")
+            return Reply(health.report(W.disk_usage, W.boot_time(), time.time(), defender=W.defender_on()), "happy")
+        if features.enabled("week_summary", self.cfg) and daysum.week_command(ql):
+            self._count_use("week_summary")
+            return Reply(daysum.week_text(self.store, time.time()), "happy")
+        if features.enabled("todo", self.cfg):
+            t = todo.command(ql)
+            if t:
+                self._count_use("todo")
+                kind, arg = t
+                if kind == "add":
+                    self.store.add_todo(time.time(), arg)
+                    return Reply(f"Добавил в список дел: {arg} ✏", "happy")
+                if kind == "show":
+                    return Reply(todo.render(self.store.list_todos()), "happy")
+                if kind == "done":
+                    hit = todo.find_open(self.store.list_todos(), arg)
+                    if not hit:
+                        return Reply("Не нашёл одно открытое дело с таким текстом 🤔", "curious")
+                    self.store.set_todo_done(hit[0], True)
+                    return Reply(f"Отметил выполненным: {hit[1]} ✔", "happy")
+                if kind == "clear":
+                    return Reply(f"Убрал выполненные дела: {self.store.clear_done_todos()} 🧹", "happy")
+        if features.enabled("cleanup", self.cfg):
+            c = cleanup.command(ql)
+            if c == "size":
+                self._count_use("cleanup")
+                home = os.path.expanduser("~")
+                folders = {n: cleanup.folder_size(os.path.join(home, n)) for n in ("Downloads", "Documents", "Videos", "Desktop")}
+                folders["Временные файлы"] = cleanup.folder_size(cleanup.temp_dir())
+                return Reply(cleanup.size_text(folders), "curious")
+            if c == "clean":
+                self._count_use("cleanup")
+                files = cleanup.old_temp_files(cleanup.temp_dir(), time.time())
+                if not files:
+                    return Reply("Старых временных файлов нет — чистить нечего 👌", "happy")
+                total = sum(s for _, s in files)
+                return commands._ask(f"Удалить {len(files)} временных файлов старше суток ({cleanup._mb(total)})?",
+                                     lambda: self._do_clean(files))
+        if features.enabled("sorter", self.cfg):
+            k = sorter.command(ql)
+            if k == "sort":
+                self._count_use("sorter")
+                moves = sorter.plan(os.path.join(os.path.expanduser("~"), "Downloads"))
+                if not moves:
+                    return Reply("В «Загрузках» нечего раскладывать 👌", "happy")
+                return commands._ask(f"Разложить {len(moves)} файлов по папкам в «Загрузках»? "
+                                     "Потом можно сказать «отмени сортировку»", lambda: self._do_sort(moves))
+            if k == "undo":
+                self._count_use("sorter")
+                done = self.cfg.get("last_sort") or []
+                if not done:
+                    return Reply("Нечего отменять.", "curious")
+                back = sorter.undo([tuple(p) for p in done])
+                self.cfg["last_sort"] = []
+                self.save_cfg()
+                return Reply(f"Вернул на места файлов: {back} ↩", "happy")
+        if features.enabled("schedule", self.cfg):
+            low = ql.replace("ё", "е")
+            if re.fullmatch(r"(покажи|какие\s+у\s+меня)\s+расписани\w*|мои\s+расписани\w*", low.strip(" .!?")):
+                self._count_use("schedule")
+                rules = self.cfg.get("schedules") or []
+                return Reply("\n".join(f"• {r['action']} в {r['at']}" for r in rules) or "Расписаний нет.", "happy")
+            if re.fullmatch(r"(удали|очисти)\s+(все\s+)?расписани\w*", low.strip(" .!?")):
+                self.cfg["schedules"] = []
+                self.save_cfg()
+                return Reply("Расписания удалил 🧹", "happy")
+            rules = schedule.parse(low, self._schedulable)
+            if rules:
+                self._count_use("schedule")
+                self.cfg["schedules"] = (self.cfg.get("schedules") or []) + [
+                    {"action": a, "at": at, "last": ""} for a, at in rules]
+                self.save_cfg()
+                text = "; ".join(f"«{a}» в {at}" for a, at in rules)
+                return Reply(f"Запланировал: {text} ⏰", "happy")
+        return None
+
+    def _schedulable(self, action):
+        """Можно ли поставить действие в расписание: это переключатель без подтверждения или тема."""
+        if re.search(r"тем", action):
+            return True
+        t = components.find_toggle(action)
+        if not t or t.admin or t.confirm_on or t.confirm_off:
+            return False                          # права администратора и подтверждения — только вручную
+        return not re.search(r"защит|брандмауэр|файрвол|удал[её]нн\w+ рабоч|служб", t.name.lower())   # безопасность — только вручную
+
+    def _do_clean(self, files):
+        done, freed, skipped = cleanup.delete_files(files)
+        return Reply(f"Удалил {done} файлов, освободил {cleanup._mb(freed)}" +
+                     (f", пропустил занятых: {skipped}" if skipped else "") + " 🧹", "happy")
+
+    def _do_sort(self, moves):
+        done, skipped = sorter.apply(moves)
+        self.cfg["last_sort"] = [list(p) for p in done]
+        self.save_cfg()
+        return Reply(f"Разложил файлов: {len(done)}" + (f", пропустил занятых: {skipped}" if skipped else "")
+                     + ". Чтобы вернуть, скажи «отмени сортировку» 📁", "happy")
+
+    def _open_workspace(self, apps):
+        opened = 0
+        for a in apps:
+            try:
+                W.launch(a["exe"])
+                opened += 1
+            except OSError:
+                pass
+        return Reply(f"Открыл {opened} из {len(apps)} 🗂", "happy")
+
     def _ask(self, q, rewritten=False):
         ql = q.lower()
         if self.cfg.get("memory_on", True) and q.strip() and not rewritten:      # учимся на том, что пользователь просит
@@ -366,6 +535,9 @@ class Brain:
         ident = identity.answer(q)                               # кто тебя создал?
         if ident:
             return ident
+        beta = self._beta_command(q, ql)                         # бета: рабочее место, копирование, итог дня
+        if beta:
+            return beta
         if planner.wants_plan(q) and features.enabled("planner", self.cfg):
             return self._plan(q)
         if re.search(r"проиндексир|индексаци|индекс\b|как идет индекс|как идёт индекс", ql):

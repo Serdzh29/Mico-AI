@@ -4,7 +4,7 @@ from urllib.parse import quote
 
 import features
 
-BETA_PHRASES = {"подготовь рабочее место": "planner", "помодоро": "pomodoro",
+BETA_PHRASES = {"подготовь рабочее место": "planner",
                 "напомни каждый понедельник в 9:00 проверить отчёт": "recurring"}
 
 # (категория, [(фраза, что делает)])

@@ -37,7 +37,7 @@ def task_xml(user, exe, args, workdir):
     <Principal id="Author">
       <UserId>{escape(user)}</UserId>
       <LogonType>InteractiveToken</LogonType>
-      <RunLevel>LeastPrivilege</RunLevel>
+      <RunLevel>HighestAvailable</RunLevel>
     </Principal>
   </Principals>
   <Settings>

@@ -53,11 +53,15 @@ def test_examples_reach_a_handler():
 
 
 def test_html_links_round_trip():
-    import re, urllib.parse
-    beta = {"update_channel": "beta"}
-    links = re.findall(r'href="mico-do:([^"]+)"', C.html_capabilities(beta))
-    phrases = [p for _, items in C.CATEGORIES for p, _ in items]
-    assert [urllib.parse.unquote(x) for x in links] == phrases
+    import re, urllib.parse, version
+    saved, version.BUILD_CHANNEL = version.BUILD_CHANNEL, "beta"      # в бета-сборке видны все пункты
+    try:
+        beta = {"update_channel": "beta"}
+        links = re.findall(r'href="mico-do:([^"]+)"', C.html_capabilities(beta))
+        phrases = [p for _, items in C.CATEGORIES for p, _ in items]
+        assert [urllib.parse.unquote(x) for x in links] == phrases
+    finally:
+        version.BUILD_CHANNEL = saved
 
 
 def test_stable_channel_hides_beta_functions():
@@ -67,7 +71,13 @@ def test_stable_channel_hides_beta_functions():
         assert phrase not in text, phrase
     assert "BETA" not in C.html_capabilities(stable)
     assert "открой блокнот" in C.html_capabilities(stable)
-    assert "подготовь рабочее место" in C.html_capabilities(dict(stable, update_channel="beta"))
+    assert "подготовь рабочее место" not in C.html_capabilities(dict(stable, update_channel="beta"))   # стабильная сборка
+    import version
+    saved, version.BUILD_CHANNEL = version.BUILD_CHANNEL, "beta"
+    try:
+        assert "подготовь рабочее место" in C.html_capabilities(dict(stable, update_channel="beta"))  # бета-сборка
+    finally:
+        version.BUILD_CHANNEL = saved
 
 
 def test_tour_has_six_steps_with_phrases():

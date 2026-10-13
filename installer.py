@@ -315,7 +315,8 @@ def _save_settings(autostart_on):
         cfg = json.load(open(path, encoding="utf-8"))
     except (OSError, ValueError):
         cfg = {}
-    cfg.update(autostart=autostart_on, greet_on_start=True, update_channel="stable")
+    import version
+    cfg.update(autostart=autostart_on, greet_on_start=True, update_channel=version.BUILD_CHANNEL)
     cfg.setdefault("last_version", _version())            # не показывать «что нового» сразу после установки
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)

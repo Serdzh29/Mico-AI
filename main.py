@@ -53,11 +53,11 @@ from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, Qt, QTimer, 
 from PyQt6.QtGui import QAction, QColor, QGuiApplication, QIcon, QImage
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox,
                              QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMenu,
-                             QInputDialog, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QSlider, QSpinBox, QTabWidget, QTextBrowser, QToolButton,
+                             QInputDialog, QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QSlider, QSpinBox, QTabWidget, QTextBrowser, QToolButton,
                              QVBoxLayout, QScrollArea, QSizePolicy,
                              QWidget)
 import psutil
-import actions, autostart, betaprogram, menu_items, features, capabilities, chips, commands, custom, feedback, greeting, hotkeys, breaks, indexer, initiative, mailreport, report, reminders, sleepmode, theme, updatecheck, version, windows_info
+import actions, autostart, betaprogram, clipbuf, daysum, ghreport, schedule, menu_items, features, capabilities, chips, commands, custom, feedback, greeting, hotkeys, breaks, indexer, initiative, mailreport, report, reminders, sleepmode, theme, updatecheck, version, windows_info
 import winctl as W
 from actions import Reply
 from blob import Blob
@@ -84,6 +84,8 @@ DEFAULTS = {
     "hotkey_chat": "ctrl+alt+m", "hotkey_translate": "ctrl+alt+t",   # глобальные сочетания (нужен перезапуск)
     "proactive_breaks": True, "proactive_break_min": 60,   # напоминание о перерыве
     "quiet_mode": False,                  # режим тишины
+    "day_summary_at": "20:00", "day_summary_last": "",   # итог дня (бета): время и дата последней отправки
+    "workspace": {},                     # рабочее место (бета): запомненные программы
     "update_check": True, "update_checked_at": 0,   # проверка новой версии раз в сутки (только сообщает)
     "index_on": True,                              # индекс компьютера (имена и пути, без содержимого)
     "custom_phrases": [],                          # свои фразы-команды: [{"say": "...", "do": "...; ..."}]
@@ -584,6 +586,74 @@ def ask_beta_consent(parent):
         == QMessageBox.StandardButton.Yes
 
 
+class BetaReportDialog(QDialog):
+    """Отзыв бета-тестера на GitHub. Текст показываем целиком: его можно поправить, и ничего не уходит,
+    пока человек не нажмёт «Открыть GitHub». Обсуждения на GitHub публичны — это написано прямо в окне."""
+
+    def __init__(self, parent, cfg):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.setWindowTitle("Отзыв о бете")
+        self.resize(580, 480)
+        v = QVBoxLayout(self)
+        v.addWidget(QLabel("<b>Что отправляем</b>"))
+        self.kind = QComboBox()
+        self.kind.addItem("Ошибка или сбой", "bug")
+        self.kind.addItem("Как я пользуюсь бетой", "usage")
+        self.kind.currentIndexChanged.connect(self.rebuild)
+        v.addWidget(self.kind)
+        self.log = QCheckBox("Приложить последние строки журнала ошибок (пути к файлам будут скрыты)")
+        self.log.toggled.connect(self.rebuild)
+        v.addWidget(self.log)
+        self.text = QPlainTextEdit()
+        v.addWidget(self.text)
+        self.warn = QLabel("")
+        self.warn.setWordWrap(True)
+        v.addWidget(self.warn)
+        hint = QLabel("Отзыв публичен: его увидят все на GitHub. Проверь текст и поправь, что нужно. "
+                      "Ничего не отправится, пока ты не нажмёшь «Открыть GitHub».")
+        hint.setWordWrap(True)
+        v.addWidget(hint)
+        row = QHBoxLayout()
+        copy_btn = QPushButton("Скопировать текст")
+        copy_btn.clicked.connect(lambda: QGuiApplication.clipboard().setText(self.text.toPlainText()))
+        open_btn = QPushButton("Открыть GitHub")
+        open_btn.clicked.connect(self.open_github)
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.clicked.connect(self.reject)
+        row.addWidget(copy_btn)
+        row.addStretch(1)
+        row.addWidget(cancel_btn)
+        row.addWidget(open_btn)
+        v.addLayout(row)
+        self.rebuild()
+
+    def _log_tail(self):
+        for name in ("crash.log", "startup.log"):
+            try:
+                lines = open(_os.path.join(_mico_dir(), name), encoding="utf-8", errors="replace").read().splitlines()
+            except OSError:
+                continue
+            if lines:
+                return "\n".join(lines[-30:])
+        return ""
+
+    def rebuild(self):
+        import platform
+        kind = self.kind.currentData()
+        body = ghreport.build_body(kind, version.APP_VERSION, version.BUILD_CHANNEL,
+                                   f"Windows, сборка {platform.version()}", self.cfg.get("beta_usage", {}),
+                                   self._log_tail() if (kind == "bug" and self.log.isChecked()) else "")
+        self.text.setPlainText(body)
+        self.warn.setText("Текст длинный: в ссылку войдёт только начало. Лучше нажми «Скопировать текст» "
+                          "и вставь его в обсуждение вручную." if ghreport.is_too_long(body) else "")
+
+    def open_github(self):
+        body = self.text.toPlainText()
+        webbrowser.open(ghreport.issue_url(version.ISSUES_REPO, self.kind.currentData(), body))
+        self.accept()
+
+
 class SettingsDialog(QDialog):
     status = pyqtSignal(str)
     pulled = pyqtSignal(str)
@@ -699,6 +769,9 @@ class SettingsDialog(QDialog):
         now_ch = "бета" if cfg.get("update_channel") == "beta" else "стабильный"
         self.beta_now = QLabel(f"Сейчас: {now_ch} канал · Mico {version.display_version(cfg.get('update_channel', 'stable'))}")
         fp.addRow(self.beta_now)
+        report_btn = QPushButton("Отправить отзыв на GitHub…")
+        report_btn.clicked.connect(lambda: BetaReportDialog(self, cfg).exec())
+        fp.addRow(report_btn)
         self.quiet = WrapCheck("Режим тишины: без приветствий, инициативы и подсказок")
         self.quiet.setChecked(cfg.get("quiet_mode", False))
         f.addRow(self._hc(self.quiet, "quiet"))
@@ -882,7 +955,8 @@ class SettingsDialog(QDialog):
         tabs.addTab(page((beh, "Поведение и запуск")), "Основные")
         tabs.addTab(page((smart, "Погода, память, приветствие"), (ph, "Свои фразы"),
                          (btn, "Кнопки под чатом")), "Возможности")
-        tabs.addTab(page((pp, betaprogram.TITLE)), "Бета")
+        if version.BUILD_CHANNEL == "beta":                 # в стабильной сборке вкладки беты нет
+            tabs.addTab(page((pp, betaprogram.TITLE)), "Бета")
         tabs.addTab(page((mod, "Модели Ollama")), "Модели")
 
         self._fit_widgets()
@@ -1238,6 +1312,9 @@ def main():
     existed = os.path.exists(CFG_PATH)           # была ли уже установка (для «что нового»)
     _stage("запуск main()")
     cfg, store = load_cfg(), Store()
+    if version.BUILD_CHANNEL == "stable" and cfg.get("update_channel") != "stable":
+        cfg["update_channel"] = "stable"                 # стабильная сборка всегда на стабильном канале
+        save_cfg(cfg)
     _stage("настройки и хранилище готовы")
     store.purge(cfg["retention_days"])
     commands.SEARCH_URL = cfg["search_url"]
@@ -1532,6 +1609,48 @@ def main():
         except (OSError, ValueError):
             pass
     app.aboutToQuit.connect(cleanup_pid)
+
+    # история копирования (бета): запоминаем новые тексты из буфера; пароли и менеджеры паролей пропускаем
+    clip_rec = clipbuf.Recorder(store)
+    clip_t = QTimer()
+    def clip_tick():
+        if not features.enabled("clipboard_search", cfg):
+            return
+        proc = W.process_of(watcher.last_hwnd) if watcher.last_hwnd else ""
+        clip_rec.offer(QGuiApplication.clipboard().text(), proc)
+    clip_t.timeout.connect(clip_tick)
+    clip_t.start(2000)
+
+    # итог дня (бета): раз в минуту проверяем, не пора ли прислать сводку за сегодня
+    sum_t = QTimer()
+    def day_tick():
+        if not features.enabled("day_summary", cfg) or cfg.get("quiet_mode"):
+            return
+        now = time.time()
+        if daysum.due(now, cfg):
+            save_cfg(cfg)
+            bus.info.emit("🌙 " + daysum.build(store, now))
+    sum_t.timeout.connect(day_tick)
+    sum_t.start(60000)
+
+    # расписание переключателей (бета): раз в минуту выполняем правила, которые пора выполнить
+    sched_t = QTimer()
+    def sched_tick():
+        if not features.enabled("schedule", cfg) or not cfg.get("schedules"):
+            return
+        due_rules = schedule.due(cfg["schedules"], time.time())
+        if not due_rules:
+            return
+        save_cfg(cfg)
+        for r in due_rules:
+            try:
+                rep = commands.handle(r["action"], lambda t: None, lambda: None)
+            except Exception:
+                continue
+            if rep and getattr(rep, "text", ""):
+                bus.info.emit(f"⏰ {rep.text}")
+    sched_t.timeout.connect(sched_tick)
+    sched_t.start(60000)
 
     # инициатива (бета): Mico смотрит на экран, когда сменилось окно, и может сам что-то сказать
     ini_gate = initiative.Gate()

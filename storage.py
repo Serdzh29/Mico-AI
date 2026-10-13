@@ -40,6 +40,8 @@ class Store:
             pass
         self.db.execute("CREATE TABLE IF NOT EXISTS feedback(ts INTEGER, kind TEXT, body BLOB)")
         self.db.execute("CREATE TABLE IF NOT EXISTS notes(ts INTEGER, text BLOB)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS clips(ts INTEGER, text BLOB)")      # история копирования (бета)
+        self.db.execute("CREATE TABLE IF NOT EXISTS todos(id INTEGER PRIMARY KEY AUTOINCREMENT, text BLOB, done INTEGER, ts INTEGER)")
         self.db.execute("CREATE TABLE IF NOT EXISTS index_items(k TEXT PRIMARY KEY, kind TEXT, name BLOB, path BLOB, mtime INTEGER, size INTEGER)")
         self.db.commit()
 
@@ -142,6 +144,49 @@ class Store:
             self.db.execute("DELETE FROM reminders WHERE id=?", (rid,))
             self.db.commit()
 
+    def add_todo(self, ts, text):
+        with self.lock:
+            cur = self.db.execute("INSERT INTO todos(text, done, ts) VALUES(?,0,?)", (self._enc(text[:300]), int(ts)))
+            self.db.commit()
+            return cur.lastrowid
+
+    def list_todos(self):
+        """[(id, текст, выполнено)] — сначала открытые, потом выполненные."""
+        with self.lock:
+            rows = self.db.execute("SELECT id, text, done FROM todos ORDER BY done, id").fetchall()
+        return [(i, self.f.decrypt(t).decode(), bool(d)) for i, t, d in rows]
+
+    def set_todo_done(self, tid, done=True):
+        with self.lock:
+            self.db.execute("UPDATE todos SET done=? WHERE id=?", (1 if done else 0, tid))
+            self.db.commit()
+
+    def clear_done_todos(self):
+        with self.lock:
+            cur = self.db.execute("DELETE FROM todos WHERE done=1")
+            self.db.commit()
+            return cur.rowcount
+
+    def add_clip(self, ts, text):
+        import clipbuf
+        with self.lock:
+            self.db.execute("INSERT INTO clips VALUES(?,?)", (int(ts), self._enc(text[:clipbuf.MAX_LEN])))
+            self.db.execute("DELETE FROM clips WHERE rowid NOT IN "
+                            "(SELECT rowid FROM clips ORDER BY ts DESC LIMIT ?)", (clipbuf.KEEP,))
+            self.db.commit()
+
+    def list_clips(self):
+        """Последние копии, от новых к старым: [(ts, текст)]."""
+        with self.lock:
+            rows = self.db.execute("SELECT ts, text FROM clips ORDER BY ts DESC").fetchall()
+        return [(ts, self.f.decrypt(t).decode()) for ts, t in rows]
+
+    def forget_clips(self):
+        with self.lock:
+            self.db.execute("DELETE FROM clips")
+            self.db.execute("DELETE FROM todos")
+            self.db.commit()
+
     def add_action(self, ts, text):
         with self.lock:
             self.db.execute("INSERT INTO actions VALUES(?,?)", (int(ts), self._enc(text[:300])))
@@ -179,4 +224,5 @@ class Store:
             self.db.execute("DELETE FROM index_items")
             self.db.execute("DELETE FROM feedback")
             self.db.execute("DELETE FROM notes")
+            self.db.execute("DELETE FROM clips")
             self.db.commit()

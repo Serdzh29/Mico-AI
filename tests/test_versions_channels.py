@@ -29,9 +29,14 @@ def test_day_suffix_is_unambiguous():
 
 
 def test_beta_features_only_in_beta_channel():
-    assert F.enabled("planner", {"update_channel": "beta"})
-    assert not F.enabled("planner", {"update_channel": "stable"})
-    assert F.enabled("memory", {"update_channel": "stable"})
+    import version
+    saved, version.BUILD_CHANNEL = version.BUILD_CHANNEL, "beta"     # проверяем поведение бета-сборки
+    try:
+        assert F.enabled("planner", {"update_channel": "beta"})
+        assert not F.enabled("planner", {"update_channel": "stable"})
+        assert F.enabled("memory", {"update_channel": "stable"})
+    finally:
+        version.BUILD_CHANNEL = saved
     assert "BETA" not in F.explain("memory") if "memory" in F.FEATURES else True
     assert F.DEV_NOTE in F.explain("initiative")
 
