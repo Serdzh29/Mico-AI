@@ -1,11 +1,16 @@
-"""Автозапуск Mico: задача в Планировщике Windows. Срабатывает при входе в систему и при разблокировке,
-каждый раз запускает Mico заново (старый экземпляр сам завершается — см. main.py, «один экземпляр»)."""
-import os, subprocess, sys
-from xml.sax.saxutils import escape
+"""Автозапуск Mico при входе в Windows.
 
-TASK = "Mico"
+Используется ключ HKCU\\...\\Run: программа стартует с обычными правами пользователя и не требует повышения.
+Задача Планировщика с наивысшими правами давала ошибку 0x800702E4 («операция требует повышения»), поэтому её больше
+не создаём. Старую задачу удаляем при установке и при первом запуске (repair_if_outdated)."""
+import os
+import subprocess
+import sys
+
+TASK = "Mico"                                             # имя старой задачи Планировщика (только для уборки)
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 NOWIN = 0x08000000
-FROZEN = bool(getattr(sys, "frozen", False))          # собран в Mico.exe (PyInstaller)
+FROZEN = bool(getattr(sys, "frozen", False))              # собран в Mico.exe (PyInstaller)
 HERE = os.path.dirname(sys.executable) if FROZEN else os.path.dirname(os.path.abspath(__file__))
 
 
@@ -15,112 +20,83 @@ def pythonw():
     return cand if os.path.exists(cand) else exe
 
 
-def task_xml(user, exe, args, workdir):
-    return f'''<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo>
-    <Description>Mico AI: запускается при входе в Windows и при разблокировке экрана</Description>
-  </RegistrationInfo>
-  <Triggers>
-    <LogonTrigger>
-      <Enabled>true</Enabled>
-      <Delay>PT10S</Delay>
-      <UserId>{escape(user)}</UserId>
-    </LogonTrigger>
-    <SessionStateChangeTrigger>
-      <Enabled>true</Enabled>
-      <StateChange>SessionUnlock</StateChange>
-      <UserId>{escape(user)}</UserId>
-    </SessionStateChangeTrigger>
-  </Triggers>
-  <Principals>
-    <Principal id="Author">
-      <UserId>{escape(user)}</UserId>
-      <LogonType>InteractiveToken</LogonType>
-      <RunLevel>HighestAvailable</RunLevel>
-    </Principal>
-  </Principals>
-  <Settings>
-    <MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy>
-    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <AllowHardTerminate>true</AllowHardTerminate>
-    <StartWhenAvailable>true</StartWhenAvailable>
-    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
-    <AllowStartOnDemand>true</AllowStartOnDemand>
-    <Enabled>true</Enabled>
-    <Hidden>false</Hidden>
-    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
-    <Priority>7</Priority>
-  </Settings>
-  <Actions Context="Author">
-    <Exec>
-      <Command>{escape(exe)}</Command>
-      <Arguments>{escape(args)}</Arguments>
-      <WorkingDirectory>{escape(workdir)}</WorkingDirectory>
-    </Exec>
-  </Actions>
-</Task>
-'''
+def command(script=None, exe=None):
+    """Строка, которую Windows запустит при входе: программа и признак «запущено из автозапуска»."""
+    if FROZEN:
+        return f'"{exe or sys.executable}" --autostart'
+    script = os.path.abspath(script or os.path.join(HERE, "main.py"))
+    return f'"{pythonw()}" "{script}" --autostart'
 
 
-def _user():
-    dom, name = os.environ.get("USERDOMAIN", ""), os.environ.get("USERNAME", "")
-    return f"{dom}\\{name}" if dom and name else name or "CurrentUser"
+def _set_run_value(cmd):
+    import winreg
+    k = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE)
+    winreg.SetValueEx(k, "Mico", 0, winreg.REG_SZ, cmd)
+
+
+def _get_run_value():
+    try:
+        import winreg
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ)
+        return winreg.QueryValueEx(k, "Mico")[0]
+    except (ImportError, OSError):
+        return None
+
+
+def _delete_run_value():
+    try:
+        import winreg
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE)
+        winreg.DeleteValue(k, "Mico")
+    except (ImportError, OSError):
+        pass
+
+
+def _task_exists():
+    """Осталась ли старая задача Планировщика от прошлых версий."""
+    r = subprocess.run(["schtasks", "/Query", "/TN", TASK], capture_output=True, text=True,
+                       errors="replace", creationflags=NOWIN)
+    return r.returncode == 0
+
+
+def _delete_task():
+    subprocess.run(["schtasks", "/Delete", "/TN", TASK, "/F"], capture_output=True, text=True,
+                   errors="replace", creationflags=NOWIN)
 
 
 def install(script=None, exe=None):
-    """Создаёт задачу. Возвращает (ok, сообщение). Права администратора не нужны."""
-    if FROZEN:
-        exe, args, workdir = exe or sys.executable, "--autostart", os.path.dirname(exe or sys.executable)
-    else:
-        script = os.path.abspath(script or os.path.join(HERE, "main.py"))
-        exe, args, workdir = pythonw(), f'"{script}" --autostart', os.path.dirname(script)
-    xml_path = os.path.join(os.environ.get("APPDATA", HERE), "Mico", "mico_task.xml")
-    os.makedirs(os.path.dirname(xml_path), exist_ok=True)
-    with open(xml_path, "w", encoding="utf-16") as f:
-        f.write(task_xml(_user(), exe, args, workdir))
-    # старый вариант автозапуска (ключ Run) убираем, чтобы Mico не стартовал дважды
-    _remove_run_key()
-    r = subprocess.run(["schtasks", "/Create", "/TN", TASK, "/XML", xml_path, "/F"],
-                       capture_output=True, text=True, errors="replace", creationflags=NOWIN)
-    out = (r.stdout + r.stderr).strip()
-    return r.returncode == 0, ("Автозапуск включён: при входе в Windows и при разблокировке" if r.returncode == 0
-                               else f"Не получилось создать задачу: {out}")
+    """Включает автозапуск. Возвращает (ok, сообщение). Права администратора не нужны."""
+    try:
+        _set_run_value(command(script=script, exe=exe))
+    except (ImportError, OSError) as e:
+        return False, f"Не получилось включить автозапуск: {e}"
+    if _task_exists():
+        _delete_task()                                  # старая задача не должна стартовать Mico второй раз
+    return True, "Автозапуск включён: Mico стартует при входе в Windows"
 
 
 def status():
-    """(включён ли, путь к запускаемому файлу или None) — по самой задаче в Планировщике, а не по настройкам."""
-    r = subprocess.run(["schtasks", "/Query", "/TN", TASK, "/XML"], capture_output=True, text=True,
-                       errors="replace", creationflags=NOWIN)
-    if r.returncode != 0:
+    """(включён ли, путь к запускаемому файлу или None) — по тому, что реально записано в Windows."""
+    cmd = _get_run_value()
+    if cmd is None and _task_exists():
+        return True, None                               # старая задача ещё стоит — починится при запуске
+    if cmd is None:
         return False, None
-    import re
-    m = re.search(r"<Command>(.*?)</Command>", r.stdout, re.S)
-    cmd = m.group(1).strip().replace("&quot;", "\"").replace("&amp;", "&") if m else None
-    return True, cmd
+    cmd = str(cmd).strip()
+    path = cmd.split('"')[1] if cmd.startswith('"') and cmd.count('"') >= 2 else cmd.split()[0]
+    return True, path
 
 
 def remove():
-    """Выключает автозапуск. Если задачи и так нет — это тоже успех: состояние уже нужное."""
-    had, _ = status()
-    r = subprocess.run(["schtasks", "/Delete", "/TN", TASK, "/F"], capture_output=True, text=True,
-                       errors="replace", creationflags=NOWIN)
-    _remove_run_key()
-    if not had:
-        return True, "Автозапуск выключен"
-    return r.returncode == 0, ("Автозапуск выключен" if r.returncode == 0
-                               else f"Не получилось выключить: {(r.stdout + r.stderr).strip()}")
+    """Выключает автозапуск. Если ничего не было — это тоже успех: состояние уже нужное."""
+    _delete_run_value()
+    if _task_exists():
+        _delete_task()
+    return True, "Автозапуск выключен"
 
 
-def _remove_run_key():
-    try:
-        import winreg
-        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0,
-                           winreg.KEY_SET_VALUE)
-        try:
-            winreg.DeleteValue(k, "Mico")
-        except FileNotFoundError:
-            pass
-    except (ImportError, OSError):
-        pass
+def repair_if_outdated():
+    """Старые версии создавали задачу в Планировщике. Переносим автозапуск на ключ Run."""
+    if not _task_exists():
+        return False
+    return install()[0]

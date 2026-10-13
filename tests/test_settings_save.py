@@ -39,6 +39,20 @@ check(json.load(open(M.CFG_PATH, encoding="utf-8")) == {"a": 1}, "старый �
 M.save_cfg({"a": 3})
 check(json.load(open(M.CFG_PATH, encoding="utf-8")) == {"a": 3}, "нормальная запись работает")
 
+# 1б. запись работает, даже если переименование файла запрещено (как при блокировке антивирусом)
+import os as _o
+_real_replace = _o.replace
+def _no_replace(*a, **k):
+    raise PermissionError("файл занят")
+_o.replace = _no_replace
+try:
+    M.save_cfg({"b": 7})
+    check(json.load(open(M.CFG_PATH, encoding="utf-8")) == {"b": 7}, "сохраняем без переименования")
+finally:
+    _o.replace = _real_replace
+check("os.replace" not in open(_os.path.join(ROOT, "main.py"), encoding="utf-8").read().split("def save_cfg")[1].split("def ")[0],
+      "save_cfg не должен переименовывать файл")
+
 # 2. accept: настройки сохраняются, даже если автозапуск падает с исключением
 class Ctl:
     def __init__(self, v=False): self.v = v

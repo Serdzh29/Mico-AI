@@ -32,52 +32,36 @@ for q in ["кто придумал пиццу", "кто твой любимый 
     check(identity.answer(q) is None, q)
 check(identity.answer("кто тебя создал?").mood == "happy")
 
-# ---------- автозапуск: задача в Планировщике — источник правды ----------
-calls = []
-xml_state = {"exists": False, "cmd": r"C:\Mico AI Github\Mico.exe"}
+# ---------- автозапуск: ключ Run (без повышения прав); старая задача Планировщика — только уборка ----------
+run_value = {"cmd": None}
+tasks = {"exists": False, "deleted": 0}
+A._set_run_value = lambda cmd: run_value.update(cmd=cmd)
+A._get_run_value = lambda: run_value["cmd"]
+A._delete_run_value = lambda: run_value.update(cmd=None)
+A._task_exists = lambda: tasks["exists"]
+A._delete_task = lambda: (tasks.update(exists=False), tasks.__setitem__("deleted", tasks["deleted"] + 1))
 
-class _R:
-    def __init__(self, rc, out=""):
-        self.returncode, self.stdout, self.stderr = rc, out, ""
-
-def fake_run(args, **kw):
-    calls.append(args)
-    if args[:2] == ["schtasks", "/Query"]:
-        if not xml_state["exists"]:
-            return _R(1, "ERROR: не найдено")
-        return _R(0, f"<Task><Actions><Exec><Command>{xml_state['cmd']}</Command></Exec></Actions></Task>")
-    if args[:2] == ["schtasks", "/Create"]:
-        xml_state["exists"] = True
-        return _R(0, "SUCCESS")
-    if args[:2] == ["schtasks", "/Delete"]:
-        if not xml_state["exists"]:
-            return _R(1, "ERROR")
-        xml_state["exists"] = False
-        return _R(0, "SUCCESS")
-    return _R(0)
-
-A.subprocess.run = fake_run
-
-on, cmd = A.status()
-check(on is False and cmd is None, "задачи нет — выключено")
+on, path = A.status()
+check(on is False and path is None, "ничего не включено — выключено")
 
 ok, msg = A.install(exe=r"C:\Mico AI Github\Mico.exe")
-check(ok and xml_state["exists"], msg)
-xml = open(_os.path.join(_tmp, "Mico", "mico_task.xml"), encoding="utf-16").read()
-check("<Delay>PT10S</Delay>" in xml, "задержка после входа")
-check("SessionUnlock" in xml and "LogonTrigger" in xml, "запуск при входе и разблокировке")
-check("<RunLevel>HighestAvailable</RunLevel>" in xml, "задача стартует с наивысшими правами пользователя (иначе падает с 0x800702E4)")
-check(A.status()[0] is True, "после установки задача видна")
+check(ok, msg)
+check(run_value["cmd"].endswith('main.py" --autostart') and run_value["cmd"].startswith('"'), run_value["cmd"])
+check(A.status()[0] is True, A.status())
+check("HighestAvailable" not in open(A.__file__, encoding="utf-8").read(), "наивысших прав нигде нет")
 
-# выключение задачи, которой нет, — не ошибка (раньше здесь было предупреждение)
+# миграция: была старая задача Планировщика — установка её убирает, автозапуск остаётся один
+run_value["cmd"] = None
+tasks.update(exists=True)
+on, _ = A.status()
+check(on is True, "старая задача считается включённым автозапуском (и починится)")
+check(A.repair_if_outdated() is True and tasks["exists"] is False and run_value["cmd"] is not None,
+      "repair переносит автозапуск на ключ Run и убирает задачу")
+check(A.repair_if_outdated() is False, "без старой задачи ремонт ничего не делает")
+
 ok, _ = A.remove()
-check(ok and not xml_state["exists"], "выключили")
+check(ok and run_value["cmd"] is None and A.status()[0] is False, "выключили")
 ok, msg = A.remove()
 check(ok, "повторное выключение — тоже успех: " + msg)
-
-# установка повторно перезаписывает задачу (чинит старый путь к exe)
-xml_state.update(exists=True, cmd=r"C:\Старое\Mico.exe")
-ok, _ = A.install(exe=r"C:\Mico AI Github\Mico.exe")
-check(ok and any(c[:2] == ["schtasks", "/Create"] for c in calls), "install всегда пересоздаёт задачу")
 
 print("ALL OK")

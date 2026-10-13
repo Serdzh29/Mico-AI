@@ -103,18 +103,20 @@ CFG_PATH = os.path.join(APPDIR, "config.json")
 def load_cfg():
     cfg = dict(DEFAULTS)
     if os.path.exists(CFG_PATH):
-        cfg.update(json.load(open(CFG_PATH, encoding="utf-8")))
+        with open(CFG_PATH, encoding="utf-8") as f:
+            cfg.update(json.load(f))
     if cfg["color"].upper() == "#FFC94A":      # старый жёлтый -> новый персиковый
         cfg["color"] = DEFAULTS["color"]
     return cfg
 
 
 def save_cfg(cfg):
-    """Пишем во временный файл и подменяем основной: если запись оборвётся, старые настройки не потеряются."""
-    tmp = CFG_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, CFG_PATH)
+    """Сначала собираем текст целиком: если что-то не сериализуется, файл не трогаем.
+    Пишем прямо в config.json, без переименования: на Windows переименование часто мешает
+    антивирус или индексатор, который держит файл открытым, и настройки не сохранялись."""
+    text = json.dumps(cfg, ensure_ascii=False, indent=2)
+    with open(CFG_PATH, "w", encoding="utf-8") as f:
+        f.write(text)
 
 
 PID_FILE = os.path.join(APPDIR, "mico.pid")
@@ -1265,7 +1267,11 @@ class SettingsDialog(QDialog):
             ok, msg = False, f"не получилось: {e}"
         if ok:
             self.cfg["autostart"] = self.auto.isChecked()
-        save_cfg(self.cfg)
+        try:
+            save_cfg(self.cfg)
+        except OSError as e:                       # не записали — окно не закрываем, чтобы пользователь увидел причину
+            QMessageBox.warning(self, "Настройки", f"Не удалось записать настройки: {e}")
+            return
         if not ok:
             QMessageBox.warning(self, "Автозапуск", msg)
         super().accept()
@@ -1287,6 +1293,8 @@ class Bus(QObject):
 
 
 def main():
+    if "--autostart" in sys.argv:                # при входе в Windows даём рабочему столу загрузиться
+        time.sleep(10)
     try:                                       # 1 мс точность таймеров Windows — плавные кадры
         import ctypes
         ctypes.windll.winmm.timeBeginPeriod(1)
@@ -1596,6 +1604,13 @@ def main():
     relaunch = _alive_instance()                # Mico уже работал: это разблокировка или повторный запуск
     with open(PID_FILE, "w", encoding="utf-8") as f:
         f.write(str(os.getpid()))
+    try:                                        # журнал последнего запуска: откуда и когда стартовал Mico
+        with open(os.path.join(APPDIR, "start.log"), "w", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%d.%m.%Y %H:%M:%S')} запуск: "
+                    f"{'из автозапуска' if '--autostart' in sys.argv else 'вручную'}, pid {os.getpid()}\n")
+    except OSError:
+        pass
+    QTimer.singleShot(4000, lambda: autostart.repair_if_outdated())   # старая задача Планировщика → ключ Run
 
     def takeover_check():                       # если запустился новый экземпляр — этот уходит
         try:
