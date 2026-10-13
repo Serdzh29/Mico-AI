@@ -99,3 +99,31 @@ def answer(rows, spec, limit=LIMIT):
         if a:
             lines.append(f"   Mico: {_clip(a)}")
     return "\n".join(lines)
+
+
+def answer_days(rows, spec, summaries, limit=LIMIT):
+    """Как answer(), но для дней с готовым пересказом показываем пересказ одной строкой.
+    Поиск по теме и дни без пересказа (например, сегодня) — по репликам, как раньше."""
+    if spec.get("topic") or not summaries:
+        return answer(rows, spec, limit)
+    by_day = {}
+    for ts, q, a in pairs(rows):
+        by_day.setdefault(time.strftime("%Y-%m-%d", time.localtime(ts)), []).append((ts, q, a))
+    keys = sorted(set(by_day) | set(summaries))
+    if not keys:
+        return answer(rows, spec, limit)
+    lines = [f"Вот что мы говорили {spec['label']}:"]
+    raw_left = limit
+    for key in keys:
+        day = f"{key[8:10]}.{key[5:7]}"                       # «12.10»
+        if key in summaries:
+            lines.append(f"• {day} — {summaries[key]}")
+            continue
+        for ts, q, a in by_day.get(key, [])[-limit:]:
+            if raw_left <= 0:
+                break
+            lines.append(f"• {time.strftime('%d.%m %H:%M', time.localtime(ts))} — ты: {_clip(q)}")
+            if a:
+                lines.append(f"   Mico: {_clip(a)}")
+            raw_left -= 1
+    return "\n".join(lines)

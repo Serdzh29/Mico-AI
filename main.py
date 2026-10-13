@@ -1784,6 +1784,7 @@ def main():
 
     welcome_now = betaprogram.needs_welcome(cfg) and not relaunch and not cfg.get("quiet_mode")
     QTimer.singleShot(8000, lambda: threading.Thread(target=brain.warm_up, daemon=True).start())   # прогрев модели
+    QTimer.singleShot(8000, brain.start_digests)                                                 # пересказ прошлых дней, в фоне
     if welcome_now:
         QTimer.singleShot(900, beta_welcome)
     elif cfg["greet_on_start"] and not relaunch and not cfg.get("quiet_mode"):

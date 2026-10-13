@@ -1,8 +1,8 @@
 """Мозг Mico: локальные модели через Ollama (только 127.0.0.1) + маршрутизация запросов."""
-import base64, html as html_mod, io, json, os, re, time, webbrowser
+import base64, html as html_mod, io, json, os, re, threading, time, webbrowser
 import mss, requests, win32gui
 from PIL import Image
-import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, knowledge, notes, osagent, phrase, smart, planner, pomodoro, schedule, sorter, todo, typo, updatecheck, version, windows_info, workspace, recall, intent
+import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, knowledge, notes, osagent, phrase, smart, planner, pomodoro, schedule, sorter, todo, typo, updatecheck, version, windows_info, workspace, recall, intent, chatdigest
 import winctl as W
 from actions import Reply
 from emotions import detect_emotion, split_mood
@@ -181,7 +181,7 @@ class Brain:
         self.store.add_chat(ts, role, text)
 
     def _recall(self, q):
-        """«о чём мы говорили вчера» — отвечаем по сохранённым репликам, без обращения к модели."""
+        """«о чём мы говорили вчера» — отвечаем пересказом дня или репликами, без обращения к модели."""
         spec = recall.parse(q)
         if not spec:
             return None
@@ -189,9 +189,40 @@ class Brain:
             return Reply("Память разговора выключена в настройках, поэтому вспомнить не могу.", "curious")
         try:
             rows = self.store.chats_between(spec["t0"], spec["t1"])
+            summaries = self.store.day_summaries(chatdigest.key_of(spec["t0"]), chatdigest.key_of(spec["t1"]))
         except Exception as e:
             return Reply(f"Не получилось открыть журнал разговора: {e}", "worried")
-        return Reply(recall.answer(rows, spec), "curious")
+        return Reply(recall.answer_days(rows, spec, summaries), "curious")
+
+    # ---------- пересказ дней (в фоне, раз в час; модель вызывается только для прошедших дней) ----------
+    def start_digests(self):
+        threading.Thread(target=self._digest_loop, daemon=True).start()
+
+    def _digest_loop(self):
+        time.sleep(90)                                   # даём Mico открыться и модели прогреться
+        while True:
+            try:
+                self.digest_past_days()
+            except Exception:
+                pass                                     # пересказ — удобство, а не обязанность
+            time.sleep(3600)
+
+    def digest_past_days(self):
+        """Пишет пересказ для каждого прошедшего дня, где он ещё не готов. Возвращает, сколько написал."""
+        if not self.cfg.get("memory_on", True):
+            return 0
+        done = 0
+        for key in chatdigest.missing(time.time(), lambda t0, t1: self.store.count_chat(t0, t1) >= chatdigest.MIN_ROWS,
+                                      self.store.has_day_summary):
+            t0, t1 = chatdigest.bounds(key)
+            text = chatdigest.prompt(self.store.chats_between(t0, t1))
+            if not text:
+                continue
+            out = chatdigest.clean(self._chat(text, self.cfg["text_model"]))
+            if out:
+                self.store.add_day_summary(key, out, time.time())
+                done += 1
+        return done
 
     def ask(self, q):
         """Понимает опечатки: «открй» → «открой». Учится только на том, что пользователь пишет Mico."""

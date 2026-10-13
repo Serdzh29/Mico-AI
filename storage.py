@@ -43,6 +43,7 @@ class Store:
         self.db.execute("CREATE TABLE IF NOT EXISTS clips(ts INTEGER, text BLOB)")      # история копирования (бета)
         self.db.execute("CREATE TABLE IF NOT EXISTS chat(ts INTEGER, role TEXT, text BLOB)")  # журнал разговора
         self.db.execute("CREATE INDEX IF NOT EXISTS i_chat ON chat(ts)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS day_summary(day TEXT PRIMARY KEY, text BLOB, ts INTEGER)")  # пересказ дня
         self.db.execute("CREATE TABLE IF NOT EXISTS todos(id INTEGER PRIMARY KEY AUTOINCREMENT, text BLOB, done INTEGER, ts INTEGER)")
         self.db.execute("CREATE TABLE IF NOT EXISTS index_items(k TEXT PRIMARY KEY, kind TEXT, name BLOB, path BLOB, mtime INTEGER, size INTEGER)")
         self.db.commit()
@@ -111,6 +112,28 @@ class Store:
             rows = self.db.execute("SELECT ts, role, text FROM chat WHERE ts>=? AND ts<? "
                                    "ORDER BY ts DESC LIMIT ?", (int(t0), int(t1), int(limit))).fetchall()
         return [(ts, role, self.f.decrypt(t).decode()) for ts, role, t in reversed(rows)]
+
+    def count_chat(self, t0, t1):
+        with self.lock:
+            return self.db.execute("SELECT COUNT(*) FROM chat WHERE ts>=? AND ts<?",
+                                   (int(t0), int(t1))).fetchone()[0]
+
+    def add_day_summary(self, day, text, ts):
+        """Пересказ дня: day — ключ «ГГГГ-ММ-ДД». Текст шифруется, как и журнал."""
+        with self.lock:
+            self.db.execute("INSERT OR REPLACE INTO day_summary VALUES(?,?,?)", (day, self._enc(text), int(ts)))
+            self.db.commit()
+
+    def has_day_summary(self, day):
+        with self.lock:
+            return self.db.execute("SELECT 1 FROM day_summary WHERE day=?", (day,)).fetchone() is not None
+
+    def day_summaries(self, k0, k1):
+        """Пересказы дней от k0 (включая) до k1 (не включая) → {ключ: текст}."""
+        with self.lock:
+            rows = self.db.execute("SELECT day, text FROM day_summary WHERE day>=? AND day<? ORDER BY day",
+                                   (k0, k1)).fetchall()
+        return {day: self.f.decrypt(t).decode() for day, t in rows}
 
     def add_feedback(self, entry):
         """Отзыв зашифровывается целиком (текст, вопрос, ответ)."""
@@ -219,6 +242,7 @@ class Store:
             self.db.execute("DELETE FROM events WHERE end>=?", (cut,))
             self.db.execute("DELETE FROM actions WHERE ts>=?", (cut,))
             self.db.execute("DELETE FROM chat WHERE ts>=?", (cut,))
+            self.db.execute("DELETE FROM day_summary WHERE day>=?", (time.strftime("%Y-%m-%d", time.localtime(cut)),))
             self.db.commit()
 
     def purge(self, days):
@@ -229,6 +253,7 @@ class Store:
             self.db.execute("DELETE FROM events WHERE end<?", (cut,))
             self.db.execute("DELETE FROM actions WHERE ts<?", (cut,))
             self.db.execute("DELETE FROM chat WHERE ts<?", (cut,))
+            self.db.execute("DELETE FROM day_summary WHERE day<?", (time.strftime("%Y-%m-%d", time.localtime(cut)),))
             self.db.commit()
 
     def wipe(self):
@@ -243,4 +268,5 @@ class Store:
             self.db.execute("DELETE FROM notes")
             self.db.execute("DELETE FROM clips")
             self.db.execute("DELETE FROM chat")
+            self.db.execute("DELETE FROM day_summary")
             self.db.commit()
