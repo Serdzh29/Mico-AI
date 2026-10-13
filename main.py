@@ -110,7 +110,11 @@ def load_cfg():
 
 
 def save_cfg(cfg):
-    json.dump(cfg, open(CFG_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    """Пишем во временный файл и подменяем основной: если запись оборвётся, старые настройки не потеряются."""
+    tmp = CFG_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, CFG_PATH)
 
 
 PID_FILE = os.path.join(APPDIR, "mico.pid")
@@ -436,6 +440,7 @@ class Panel(QWidget):
         if not self.blob.isVisible():
             self.blob.show()
         self.show_near(activate=False)
+        self.blob.wake(silent=True)                 # уведомление будит спящего Mico, но чат сам не открывает
         self.blob.set_mood("surprised", 8)
         self.blob.jump()
         self.say("⏰ " + text[:1].upper() + text[1:])
@@ -1244,7 +1249,7 @@ class SettingsDialog(QDialog):
                         hotkey_translate=self.hk_tr.text().strip().lower())
         self.cfg.update(text_model=self.tm.currentText().strip(), vision_model=self.vm.currentText().strip(),
                         greet_on_start=self.greet.isChecked(), retention_days=self.keep.currentData(),
-                        search_url=SEARCH_ENGINES[self.se.currentText()])
+                        search_url=SEARCH_ENGINES.get(self.se.currentText(), SEARCH_ENGINES["Google"]))
         self.cfg.update(chat_outline=self.outline.isChecked(), chat_linked=self.linked.isChecked(),
                         chat_scale=self.cfg.get("chat_scale", 1.0), chat_ratio=self.cfg.get("chat_ratio", 1.0),
                         weather_on="weather" in self._greet_ids(), greet_items=self._greet_ids(),
@@ -1253,15 +1258,16 @@ class SettingsDialog(QDialog):
                         loc_consent=True if self.locc.isChecked() else (False if self.cfg.get("loc_consent") is not None else None))
         commands.SEARCH_URL = self.cfg["search_url"]
         # включённый флажок всегда переписываем задачу: так чинится и отсутствующая, и устаревшая (старый путь)
-        if self.auto.isChecked():
-            ok, msg = autostart.install()
-        else:
-            ok, msg = autostart.remove()
+        # ошибка автозапуска не должна мешать сохранить остальные настройки: сохраняем сначала, сообщаем потом
+        try:
+            ok, msg = autostart.install() if self.auto.isChecked() else autostart.remove()
+        except Exception as e:
+            ok, msg = False, f"не получилось: {e}"
         if ok:
             self.cfg["autostart"] = self.auto.isChecked()
-        else:
-            QMessageBox.warning(self, "Автозапуск", msg)
         save_cfg(self.cfg)
+        if not ok:
+            QMessageBox.warning(self, "Автозапуск", msg)
         super().accept()
 
     def reject(self):

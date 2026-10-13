@@ -10,7 +10,7 @@ import version
 
 DAY = 24 * 3600
 TIMEOUT = 6
-_VERSION = re.compile(r"\d{4}\.\d{2}\.\d{4}")       # ГГГГ.ММ.ДДNN, как в version.APP_VERSION
+_VERSION = re.compile(r"\d{4}\.\d{2}\.\d{4}(?:\s*\(?[a-z]\)?)?")   # ГГГГ.ММ.ДДNN и срочное исправление (a, b…)
 
 
 def fetch_latest(api_url=None, timeout=TIMEOUT):
@@ -34,9 +34,9 @@ def fetch_latest(api_url=None, timeout=TIMEOUT):
 
 
 def version_of(tag):
-    """'v2026.10.1231' → '2026.10.1231'. None, если это не номер Mico."""
+    """'v2026.10.1231' → '2026.10.1231', 'v2026.10.1305a' → '2026.10.1305(a)'. None, если это не номер Mico."""
     s = str(tag or "").strip().lstrip("vV").strip()
-    return s if _VERSION.fullmatch(s) else None
+    return version.normalize(s) if _VERSION.fullmatch(s) else None
 
 
 def is_newer(remote, local):
