@@ -24,6 +24,7 @@ def task_xml(user, exe, args, workdir):
   <Triggers>
     <LogonTrigger>
       <Enabled>true</Enabled>
+      <Delay>PT10S</Delay>
       <UserId>{escape(user)}</UserId>
     </LogonTrigger>
     <SessionStateChangeTrigger>
@@ -88,11 +89,28 @@ def install(script=None, exe=None):
                                else f"Не получилось создать задачу: {out}")
 
 
+def status():
+    """(включён ли, путь к запускаемому файлу или None) — по самой задаче в Планировщике, а не по настройкам."""
+    r = subprocess.run(["schtasks", "/Query", "/TN", TASK, "/XML"], capture_output=True, text=True,
+                       errors="replace", creationflags=NOWIN)
+    if r.returncode != 0:
+        return False, None
+    import re
+    m = re.search(r"<Command>(.*?)</Command>", r.stdout, re.S)
+    cmd = m.group(1).strip().replace("&quot;", "\"").replace("&amp;", "&") if m else None
+    return True, cmd
+
+
 def remove():
+    """Выключает автозапуск. Если задачи и так нет — это тоже успех: состояние уже нужное."""
+    had, _ = status()
     r = subprocess.run(["schtasks", "/Delete", "/TN", TASK, "/F"], capture_output=True, text=True,
                        errors="replace", creationflags=NOWIN)
     _remove_run_key()
-    return r.returncode == 0, ("Автозапуск выключен" if r.returncode == 0 else "Задачи не было")
+    if not had:
+        return True, "Автозапуск выключен"
+    return r.returncode == 0, ("Автозапуск выключен" if r.returncode == 0
+                               else f"Не получилось выключить: {(r.stdout + r.stderr).strip()}")
 
 
 def _remove_run_key():

@@ -229,14 +229,15 @@ def _install_steps(wizard, report):
     if wizard.opt_short.isChecked():
         _desktop_shortcut(create=True)
     report(2)
+    auto_on = False
     if wizard.opt_auto.isChecked():
-        ok, msg = autostart.install(exe=INSTALL_EXE)
-        if not ok:
+        auto_on, msg = autostart.install(exe=INSTALL_EXE)
+        if not auto_on:
             report(2, "не получилось, включи позже в настройках")
     report(3)
     _register_uninstall()
     report(4)
-    _save_settings(wizard.opt_auto.isChecked())             # бета ставится только из настроек, после согласия
+    _save_settings(auto_on)                                  # записываем то, что реально получилось, а не то, что выбрали
     report(5)
 
 

@@ -664,7 +664,7 @@ class SettingsDialog(QDialog):
         self.greet = WrapCheck("Здороваться при включении ПК (день/вечер, погода, что делал вчера)")
         self.greet.setChecked(cfg["greet_on_start"])
         self.auto = WrapCheck("Запускать при включении ПК и при разблокировке (Планировщик Windows)")
-        self.auto.setChecked(cfg["autostart"])
+        self.auto.setChecked(autostart.status()[0])        # показываем то, что реально стоит в Планировщике
         self.keep = QComboBox()                     # сколько хранить историю; «всегда» — без очистки
         for days, text in ((7, "7 дней"), (30, "30 дней"), (90, "90 дней"), (365, "365 дней"), (0, "всегда")):
             self.keep.addItem(text, days)
@@ -1178,12 +1178,15 @@ class SettingsDialog(QDialog):
                         initiative_on=self.ini.isChecked(), initiative_min=self.ini_min.value(),
                         loc_consent=True if self.locc.isChecked() else (False if self.cfg.get("loc_consent") is not None else None))
         commands.SEARCH_URL = self.cfg["search_url"]
-        if self.auto.isChecked() != self.cfg["autostart"]:
-            ok, msg = autostart.install() if self.auto.isChecked() else autostart.remove()
-            if ok:
-                self.cfg["autostart"] = self.auto.isChecked()
-            else:
-                QMessageBox.warning(self, "Автозапуск", msg)
+        # включённый флажок всегда переписываем задачу: так чинится и отсутствующая, и устаревшая (старый путь)
+        if self.auto.isChecked():
+            ok, msg = autostart.install()
+        else:
+            ok, msg = autostart.remove()
+        if ok:
+            self.cfg["autostart"] = self.auto.isChecked()
+        else:
+            QMessageBox.warning(self, "Автозапуск", msg)
         save_cfg(self.cfg)
         super().accept()
 

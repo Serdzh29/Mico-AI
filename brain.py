@@ -2,7 +2,7 @@
 import base64, html as html_mod, io, json, re, time
 import mss, requests, win32gui
 from PIL import Image
-import actions, capabilities, commands, components, custom, dialog, diagnose, features, indexer, knowledge, notes, osagent, planner, pomodoro, typo, windows_info
+import actions, capabilities, commands, components, custom, dialog, diagnose, features, identity, indexer, knowledge, notes, osagent, planner, pomodoro, typo, windows_info
 from actions import Reply
 from emotions import detect_emotion, split_mood
 
@@ -363,6 +363,9 @@ class Brain:
         steps = custom.find(q, self.cfg.get("custom_phrases", []))
         if steps:
             return self._run_steps(steps)
+        ident = identity.answer(q)                               # кто тебя создал?
+        if ident:
+            return ident
         if planner.wants_plan(q) and features.enabled("planner", self.cfg):
             return self._plan(q)
         if re.search(r"проиндексир|индексаци|индекс\b|как идет индекс|как идёт индекс", ql):
