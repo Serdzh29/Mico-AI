@@ -179,7 +179,7 @@ SITES = {"ютуб": "youtube.com", "youtube": "youtube.com", "гугл": "googl
          "claude": "claude.ai", "майкрософт": "microsoft.com", "microsoft": "microsoft.com", "твитч": "twitch.tv",
          "twitch": "twitch.tv", "спотифай": "open.spotify.com", "тикток": "tiktok.com", "телеграм веб": "web.telegram.org",
          "кинопоиск": "kinopoisk.ru", "мейл": "mail.ru", "яндекс почта": "mail.yandex.ru", "гугл карты": "maps.google.com",
-         "гугл диск": "drive.google.com", "гугл переводчик": "translate.google.com"}
+         "гугл диск": "drive.google.com"}
 SITE_BASE = {k: v.split(".")[-2] for k, v in SITES.items() if " " not in k}
 TLD = {"ком": "com", "ру": "ru", "орг": "org", "нет": "net", "инфо": "info", "ио": "io", "ай": "ai",
        "эпп": "app", "дев": "dev", "ус": "us", "юк": "uk", "бай": "by", "юа": "ua", "кз": "kz", "рф": "рф"}

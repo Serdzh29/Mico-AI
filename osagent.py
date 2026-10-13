@@ -12,8 +12,6 @@ CATALOG = {
                  "about": "открыть программу по названию, например «блокнот»"},
     "open_file": {"risk": OPEN, "args": {"path": str},
                   "about": "открыть файл или папку по полному пути"},
-    "find_file": {"risk": READ, "args": {"query": str},
-                  "about": "найти файлы и программы на компьютере по названию"},
     "open_settings": {"risk": OPEN, "args": {"page": str},
                       "about": "открыть страницу параметров Windows, например bluetooth, display, network"},
     "set_volume": {"risk": CHANGE, "args": {"percent": int}, "about": "громкость от 0 до 100"},
@@ -135,8 +133,6 @@ def describe(name, args):
         return f"открыть «{args['name']}»"
     if name == "open_file":
         return f"открыть «{args['path']}»"
-    if name == "find_file":
-        return f"поискать «{args['query']}»"
     if name == "open_settings":
         return f"открыть параметры Windows: {args['page']}"
     if name == "set_volume":
@@ -166,8 +162,6 @@ def execute(name, args, notify=lambda t: None):
             return f"Не нашёл «{args['path']}»."
         os.startfile(args["path"])
         return "Открыл."
-    if name == "find_file":
-        return actions.find_files(args["query"].lower()).text
     if name == "open_settings":
         winctl.open_path(f"ms-settings:{args['page']}")
         return "Открыл параметры."

@@ -41,6 +41,8 @@ class Store:
         self.db.execute("CREATE TABLE IF NOT EXISTS feedback(ts INTEGER, kind TEXT, body BLOB)")
         self.db.execute("CREATE TABLE IF NOT EXISTS notes(ts INTEGER, text BLOB)")
         self.db.execute("CREATE TABLE IF NOT EXISTS clips(ts INTEGER, text BLOB)")      # история копирования (бета)
+        self.db.execute("CREATE TABLE IF NOT EXISTS chat(ts INTEGER, role TEXT, text BLOB)")  # журнал разговора
+        self.db.execute("CREATE INDEX IF NOT EXISTS i_chat ON chat(ts)")
         self.db.execute("CREATE TABLE IF NOT EXISTS todos(id INTEGER PRIMARY KEY AUTOINCREMENT, text BLOB, done INTEGER, ts INTEGER)")
         self.db.execute("CREATE TABLE IF NOT EXISTS index_items(k TEXT PRIMARY KEY, kind TEXT, name BLOB, path BLOB, mtime INTEGER, size INTEGER)")
         self.db.commit()
@@ -96,6 +98,19 @@ class Store:
         with self.lock:
             rows = self.db.execute("SELECT ts, text FROM notes ORDER BY ts DESC LIMIT ?", (int(limit),)).fetchall()
         return [{"ts": ts, "text": self.f.decrypt(t).decode()} for ts, t in reversed(rows)]
+
+    def add_chat(self, ts, role, text):
+        """Реплика разговора: role — 'user' (ты) или 'mico'. Текст шифруется, как и остальной журнал."""
+        with self.lock:
+            self.db.execute("INSERT INTO chat VALUES(?,?,?)", (int(ts), str(role), self._enc(text[:2000])))
+            self.db.commit()
+
+    def chats_between(self, t0, t1, limit=400):
+        """Реплики за период, от старых к новым (не больше limit последних)."""
+        with self.lock:
+            rows = self.db.execute("SELECT ts, role, text FROM chat WHERE ts>=? AND ts<? "
+                                   "ORDER BY ts DESC LIMIT ?", (int(t0), int(t1), int(limit))).fetchall()
+        return [(ts, role, self.f.decrypt(t).decode()) for ts, role, t in reversed(rows)]
 
     def add_feedback(self, entry):
         """Отзыв зашифровывается целиком (текст, вопрос, ответ)."""
@@ -203,6 +218,7 @@ class Store:
             cut = int(time.time() - seconds)
             self.db.execute("DELETE FROM events WHERE end>=?", (cut,))
             self.db.execute("DELETE FROM actions WHERE ts>=?", (cut,))
+            self.db.execute("DELETE FROM chat WHERE ts>=?", (cut,))
             self.db.commit()
 
     def purge(self, days):
@@ -212,6 +228,7 @@ class Store:
             cut = int(time.time() - days * 86400)
             self.db.execute("DELETE FROM events WHERE end<?", (cut,))
             self.db.execute("DELETE FROM actions WHERE ts<?", (cut,))
+            self.db.execute("DELETE FROM chat WHERE ts<?", (cut,))
             self.db.commit()
 
     def wipe(self):
@@ -225,4 +242,5 @@ class Store:
             self.db.execute("DELETE FROM feedback")
             self.db.execute("DELETE FROM notes")
             self.db.execute("DELETE FROM clips")
+            self.db.execute("DELETE FROM chat")
             self.db.commit()

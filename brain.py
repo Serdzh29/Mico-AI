@@ -2,12 +2,13 @@
 import base64, html as html_mod, io, json, os, re, time, webbrowser
 import mss, requests, win32gui
 from PIL import Image
-import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, indexer, knowledge, notes, osagent, phrase, smart, planner, pomodoro, schedule, sorter, todo, typo, updatecheck, version, windows_info, workspace
+import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, knowledge, notes, osagent, phrase, smart, planner, pomodoro, schedule, sorter, todo, typo, updatecheck, version, windows_info, workspace, recall, intent
 import winctl as W
 from actions import Reply
 from emotions import detect_emotion, split_mood
 
 BASE = "http://127.0.0.1:11434"
+KEEP_ALIVE = "30m"                        # сколько модель держится в памяти после последнего вопроса
 SYSTEM = ("Ты — Mico, милый дружелюбный ИИ-компаньон на рабочем столе. Отвечай кратко и тепло, "
           "по-русски, если не просят иначе. Все данные остаются на этом ПК.")
 MOOD_RULE = (" Начни ответ с одной метки настроения в квадратных скобках. Выбери ту, что ближе всего к тому, "
@@ -59,13 +60,13 @@ def pull_model(name, cb):
 class Brain:
     def __init__(self, cfg, store, tracker):
         self.cfg, self.store, self.tracker = cfg, store, tracker
-        self.dialog = dialog.Dialog(window=self.cfg.get("dialog_memory_min", 15) * 60)   # память диалога
+        self.dialog = dialog.Dialog(window=self.cfg.get("dialog_memory_min", 15) * 60,   # память диалога
+                                    persist=self._persist_turn)                          # и журнал на диске
         self.notify = lambda text: None
         self.last_hwnd = lambda: self.tracker.last_hwnd      # main.py заменит на окно из WindowWatcher
         extra = {w for t in components.TOGGLES for k in t.keys for w in k.split() if len(w) >= 4}
         self.typo = typo.Corrector(store, extra)               # опечатки и свой словарь
         self.on_command = lambda q: None                       # main.py: учёт кнопок и команд
-        self.start_index = lambda: False                       # main.py: запуск индексации в фоне
         self._idx = None                                       # кэш индекса (расшифрованный)
         self._kb = None                                        # база знаний Mico (статьи из knowledge/)
         self.save_cfg = lambda: None                           # main.py: сохранить настройки
@@ -79,7 +80,8 @@ class Brain:
         system = SYSTEM + (MOOD_RULE if mood_tag else "") + ("\n" + osagent.prompt() if tools else "")
         messages = ([{"role": "system", "content": system}] +
                     (self.dialog.messages(limit=8) if use_history else []) + [msg])
-        r = requests.post(BASE + "/api/chat", json={"model": model, "messages": messages, "stream": False},
+        r = requests.post(BASE + "/api/chat", json={"model": model, "messages": messages, "stream": False,
+                                                    "keep_alive": KEEP_ALIVE},     # модель не выгружается между вопросами
                           timeout=300)
         r.raise_for_status()
         return r.json()["message"]["content"].strip()
@@ -154,9 +156,7 @@ class Brain:
         text = actions.get_clipboard().strip()
         if not text:
             return Reply("Буфер обмена пуст 📋", "curious")
-        if "переведи" in ql:
-            task = "Переведи на русский (если текст уже русский — на английский). Только перевод."
-        elif "исправ" in ql:
+        if "исправ" in ql:
             task = "Исправь ошибки в тексте. Только исправленный текст."
         elif re.search(r"кратко|суть", ql):
             task = "Перескажи кратко."
@@ -164,6 +164,34 @@ class Brain:
             task = "Объясни, что это, и кратко ответь по существу."
         out, mood = self._tagged(self._chat(task + "\n\n" + text[:6000], self.cfg["text_model"], mood_tag=True), "happy")
         return Reply(out, mood)
+
+    def warm_up(self):
+        """Загружает текстовую модель в память заранее, чтобы первый ответ не ждал загрузки. Ошибки не важны:
+        если модели нет, Mico всё равно работает по правилам."""
+        try:
+            requests.post(BASE + "/api/generate", json={"model": self.cfg["text_model"], "prompt": "",
+                                                        "keep_alive": KEEP_ALIVE}, timeout=180)
+        except Exception:
+            pass
+
+    def _persist_turn(self, ts, role, text):
+        """Журнал разговора на диске (зашифрован). Выключается вместе с памятью в настройках."""
+        if not self.cfg.get("memory_on", True):
+            return
+        self.store.add_chat(ts, role, text)
+
+    def _recall(self, q):
+        """«о чём мы говорили вчера» — отвечаем по сохранённым репликам, без обращения к модели."""
+        spec = recall.parse(q)
+        if not spec:
+            return None
+        if not self.cfg.get("memory_on", True):
+            return Reply("Память разговора выключена в настройках, поэтому вспомнить не могу.", "curious")
+        try:
+            rows = self.store.chats_between(spec["t0"], spec["t1"])
+        except Exception as e:
+            return Reply(f"Не получилось открыть журнал разговора: {e}", "worried")
+        return Reply(recall.answer(rows, spec), "curious")
 
     def ask(self, q):
         """Понимает опечатки: «открй» → «открой». Учится только на том, что пользователь пишет Mico."""
@@ -302,7 +330,6 @@ class Brain:
             ("Модель для анализа экрана", ollama_probe(BASE, [self.cfg["vision_model"]])),
             ("Права администратора", lambda: (winctl.is_admin(),
                                              "нужны только для служб и компонентов Windows (появится запрос UAC)")),
-            ("Индекс компьютера", lambda: (bool(self.index_records()), "скажи «проиндексируй компьютер»")),
         ]
         return environment_report(checks)
 
@@ -322,39 +349,6 @@ class Brain:
                 windows_info.open_setting(uri)
                 return Reply(f"Открыл «{title}»: {path}.", "happy")
         return None
-
-    def index_records(self):
-        if self._idx is None:
-            self._idx = self.store.load_index()
-        return self._idx
-
-    def _index_reply(self, q):
-        """Ответ из индекса компьютера или None, если там ничего не нашлось."""
-        recs = self.index_records()
-        if not recs:
-            return None
-        hits = indexer.search(q, recs)
-        if not hits:
-            return None
-        names = {"photo": "фото", "video": "видео", "music": "музыка", "document": "документ",
-                 "game": "игра", "app": "программа", "folder": "папка"}
-        rows = [f'<a href="mico-open:{h["path"]}">{html_mod.escape(h["name"])}</a> '
-                f'<span style="color:#8a7d6a">({names.get(h["kind"], h["kind"])})</span>' for h in hits]
-        text = f"Нашёл {len(hits)}:\n" + "\n".join(h["name"] for h in hits)
-        return Reply(text, "happy", html=f"Нашёл {len(hits)}:<br>" + "<br>".join(rows))
-
-    def _index_command(self, ql):
-        if re.search(r"статус|как|сколько|идет|идёт|готов", ql) and "проиндексир" not in ql:
-            return Reply(indexer.status_text(), "curious")
-        if self.start_index():
-            return Reply("Начинаю индексацию: программы, игры, папки, фото, документы, музыка и видео. "
-                         "Прогресс будет под чатом. Имена и пути, содержимое файлов не читаю.", "thinking")
-        return Reply(f"Индексация уже идёт. {indexer.status_text()}", "curious")
-
-    def translate(self, text):
-        """Перевод текста (для горячей клавиши на выделенном тексте)."""
-        task = "Переведи на русский (если текст уже русский — на английский). Только перевод."
-        return self._chat(task + "\n\n" + text[:6000], self.cfg["text_model"])
 
     def _count_use(self, feature):
         """Считаем, сколько раз пользовались бета-функцией. Только число: ни текста, ни содержимого."""
@@ -553,6 +547,9 @@ class Brain:
                 pass
         if phrase.is_greeting(q):                                # «доброе утро!», «привет 😊»
             return Reply(phrase.greeting_text(kind=phrase.greeting_kind(q)), "happy")
+        remembered = self._recall(q)                             # «о чём мы говорили вчера»
+        if remembered:
+            return remembered
         refusal = smart.safety_refusal(ql)                       # опасное — не выполняем, объясняем
         if refusal:
             return Reply(refusal, "curious")
@@ -583,8 +580,6 @@ class Brain:
             return beta
         if planner.wants_plan(q) and features.enabled("planner", self.cfg):
             return self._plan(q)
-        if re.search(r"проиндексир|индексаци|индекс\b|как идет индекс|как идёт индекс", ql):
-            return self._index_command(ql)
         sysreply = self._windows_question(q, ql)
         if sysreply:
             return sysreply
@@ -600,15 +595,13 @@ class Brain:
             if r:
                 self._handled = True
                 return r
+            if not rewritten:                                    # «погромче», «врубай вайфай» → известная команда
+                better = intent.match(q)                         # без обращения к модели
+                if better and better.strip().lower() != q.strip().lower():
+                    return self._ask(better, rewritten=True)
             cap = smart.capability_question(ql)                  # «а ты умеешь музыку включать?»
             if cap:
                 return Reply(cap, "happy")
-            if re.search(r"\b(найди|найти|поищи|ищи|искать|где|покажи|какие|какой|какая)\b", ql):
-                r = self._index_reply(q)                 # сначала — по индексу компьютера
-                if r:
-                    return r
-            if re.search(r"\b(найди|найти|поищи|ищи|искать)\b", ql) and re.search(FILEWORDS, ql):
-                return actions.find_files(ql)
             if "буфер" in ql:
                 return self._clipboard(ql)
             if re.search(r"назад|что я делал|за последн", ql):

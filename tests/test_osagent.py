@@ -63,7 +63,7 @@ def test_powershell_action_goes_through_the_check():
 
 def test_only_changes_and_dangerous_need_confirmation():
     assert not O.needs_confirm("open_app")
-    assert not O.needs_confirm("find_file")
+    assert "find_file" not in O.CATALOG          # поиск файлов и программ удалён
     assert O.needs_confirm("set_volume")
     assert O.needs_confirm("close_window")
     assert O.needs_confirm("run_powershell")

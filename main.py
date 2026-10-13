@@ -57,7 +57,7 @@ from PyQt6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox, Q
                              QVBoxLayout, QScrollArea, QSizePolicy,
                              QWidget)
 import psutil
-import actions, autostart, betaprogram, phrase, clipbuf, daysum, ghreport, schedule, menu_items, features, capabilities, chips, commands, custom, feedback, greeting, hotkeys, breaks, indexer, initiative, mailreport, report, reminders, sleepmode, theme, updatecheck, version, windows_info
+import actions, autostart, betaprogram, phrase, clipbuf, daysum, ghreport, schedule, menu_items, features, capabilities, chips, commands, custom, feedback, greeting, hotkeys, breaks, initiative, mailreport, report, reminders, sleepmode, theme, updatecheck, version, windows_info
 import winctl as W
 from actions import Reply
 from blob import Blob
@@ -81,7 +81,7 @@ DEFAULTS = {
     "chat_outline": True,                 # обводка вокруг окна чата
     "city": "", "loc_consent": None,      # город для погоды; None — ещё не спрашивали про геопозицию
     "weather_on": True, "memory_on": True,
-    "hotkey_chat": "ctrl+alt+m", "hotkey_translate": "ctrl+alt+t",   # глобальные сочетания (нужен перезапуск)
+    "hotkey_chat": "ctrl+alt+m",   # глобальное сочетание (нужен перезапуск)
     "proactive_breaks": True, "proactive_break_min": 60,   # напоминание о перерыве
     "quiet_mode": False,                  # режим тишины
     "day_summary_at": "20:00", "day_summary_last": "",   # итог дня (бета): время и дата последней отправки
@@ -818,9 +818,7 @@ class SettingsDialog(QDialog):
         f.addRow(self.mcnt)
         self._menu_changed()
         self.hk_chat = QLineEdit(cfg.get("hotkey_chat", "ctrl+alt+m"))
-        self.hk_tr = QLineEdit(cfg.get("hotkey_translate", "ctrl+alt+t"))
         f.addRow("Горячая клавиша: открыть чат", self.hk_chat)
-        f.addRow("Горячая клавиша: перевести выделенное", self.hk_tr)
         f.addRow(QLabel("<small>Например ctrl+alt+m. Нужно сочетание с Ctrl, Alt, Shift или Win. "
                         "Применится после перезапуска Mico.</small>"))
 
@@ -1278,8 +1276,7 @@ class SettingsDialog(QDialog):
         self.cfg.update(sleep_after_min=self.sleep_min.value())
         self.cfg.update(proactive_breaks=self.pbr.isChecked(),
                         proactive_break_min=self.pbr_min.value())
-        self.cfg.update(custom_phrases=list(self._phrases), hotkey_chat=self.hk_chat.text().strip().lower(),
-                        hotkey_translate=self.hk_tr.text().strip().lower())
+        self.cfg.update(custom_phrases=list(self._phrases), hotkey_chat=self.hk_chat.text().strip().lower())
         self.cfg.update(text_model=self.tm.currentText().strip(), vision_model=self.vm.currentText().strip(),
                         greet_on_start=self.greet.isChecked(), retention_days=self.keep.currentData(),
                         search_url=SEARCH_ENGINES.get(self.se.currentText(), SEARCH_ENGINES["Google"]))
@@ -1393,45 +1390,10 @@ def main():
         if ok and text.strip():
             store.add_feedback(feedback.make_entry("idea", text))
             QMessageBox.information(None, "Спасибо", "Идея сохранена. Она попадёт к разработчику вместе с отчётом.")
-    bus.index_text.connect(panel.on_index_text)
-
-    def index_done(count, err):
-        brain._idx = None                    # следующий поиск прочитает новый индекс
-        bus.index_text.emit("")
-        if err:
-            bus.info.emit(f"Индексация не получилась: {err}")
-        else:
-            bus.info.emit(f"📚 Индекс готов: {count} элементов. Скажи, что найти.")
-
-    def start_index():
-        return indexer.run(store, progress=lambda p, t: bus.index_text.emit(f"📚 Индексация: {p}%"),
-                           done=index_done)
-    brain.start_index = start_index
-
-    def translate_selection():
-        """Ctrl+Alt+T: копирует выделенный текст из активного окна и показывает перевод в чате."""
-        panel.show_near(activate=False)
-
-        def work():
-            try:
-                W.press("ctrl", "c")
-                time.sleep(0.25)
-                text = actions.get_clipboard().strip()
-                if not text:
-                    r = Reply("Не вижу выделенного текста. Выдели текст в любом окне и нажми сочетание ещё раз.",
-                              "curious")
-                else:
-                    r = Reply(brain.translate(text), "happy")
-            except Exception as e:
-                r = Reply(f"Не получилось перевести: {e}", "worried")
-            panel.answered.emit(r)
-        threading.Thread(target=work, daemon=True).start()
 
     def on_hotkey(hid):
         if hid == 1:
             panel.toggle()
-        elif hid == 2:
-            translate_selection()
     bus.hotkey.connect(on_hotkey)
 
     def offer_update(info):
@@ -1454,8 +1416,7 @@ def main():
             if info:
                 bus.update_found.emit(info)
         threading.Thread(target=work, daemon=True).start()
-    hk = hotkeys.HotkeyThread({1: cfg.get("hotkey_chat", "ctrl+alt+m"),
-                               2: cfg.get("hotkey_translate", "ctrl+alt+t")}, bus.hotkey.emit)
+    hk = hotkeys.HotkeyThread({1: cfg.get("hotkey_chat", "ctrl+alt+m")}, bus.hotkey.emit)
     hk.start()
     hk.ready.wait(3)
     if hk.failed:
@@ -1822,12 +1783,11 @@ def main():
             QTimer.singleShot(1200 + i * 3200, lambda t=line: panel.say(t))
 
     welcome_now = betaprogram.needs_welcome(cfg) and not relaunch and not cfg.get("quiet_mode")
+    QTimer.singleShot(8000, lambda: threading.Thread(target=brain.warm_up, daemon=True).start())   # прогрев модели
     if welcome_now:
         QTimer.singleShot(900, beta_welcome)
     elif cfg["greet_on_start"] and not relaunch and not cfg.get("quiet_mode"):
         QTimer.singleShot(700, greet)
-    if not store.load_index() and cfg.get("index_on", True) and not cfg.get("quiet_mode"):
-        QTimer.singleShot(4000, start_index)          # первый запуск: индексируем компьютер в фоне
     QTimer.singleShot(2600, whats_new)
     QTimer.singleShot(7000, start_update_check)     # после приветствия, в фоне
 

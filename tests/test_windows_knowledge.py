@@ -28,7 +28,7 @@ head, _, unconfirmed = text.partition("## Что пока не подтверж�
 check(unconfirmed, "нет раздела о неподтверждённом")
 for rumor in ["Copilot в проводнике", "агент", "ИИ в диспетчере"]:
     check(rumor not in head, f"слух «{rumor}» попал в факты")
-check("10 октября 2028" in head and "не проверено" in head.lower(), "дата поддержки 26H2 помечена как непроверенная")
+check("10 октября 2028" in head and "release health" in head, "дата поддержки 26H2 без источника Microsoft")
 
 # --- данные о сборках: официальное помечено, непроверенное — нет ---
 d = json.load(open(_os.path.join(ROOT, "data", "windows_releases.json"), encoding="utf-8"))
@@ -36,10 +36,10 @@ for b in d["builds"]:
     if b.get("official") is True:
         check(re.search(r"Insider|Microsoft|blogs\.windows", b.get("source", "")), b["build"])
     if b["build"] == "26300.9457":
-        check(b.get("official") is False, "сборка с пересказа не помечена как неподтверждённая")
+        check(b.get("official") is True and "Microsoft" in b.get("source", ""), "сборка выпуска 26H2 без источника Microsoft")
 for lc in d["lifecycle"]:
     if lc["version"] == "26H2":
-        check(lc.get("home_pro_end") is None, "срок поддержки 26H2 не должен выдаваться без подтверждения")
+        check(lc.get("home_pro_end") == "2028-10-10" and "Microsoft" in lc.get("source", ""), "срок 26H2 без источника")
     if lc["version"] == "24H2":
         check("13 октября 2026" in lc.get("note", ""), "24H2: дата окончания обновлений")
 

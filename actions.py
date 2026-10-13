@@ -12,7 +12,6 @@ CAPS = ("Вот что я умею (напиши команду в чат):\n"
         "📸 Скриншот — «сделай скриншот»\n"
         "👀 Смотреть на экран — «что у меня на экране?», «помоги ответить другу»\n"
         "🕐 Помнить, что ты делал — «что я делал час назад?»\n"
-        "📁 Искать файлы — «найди файл договор pdf»\n"
         "🚀 Программы и сайты — «открой блокнот, калькулятор и хром», «открой сайт apple.com», «закрой хром»\n"
         "🔎 Поиск в интернете — «загугли рецепт борща»\n"
         "📡 Связь — «включи/выключи wi-fi», «блютуз», «режим полёта», «точка доступа»\n"
@@ -22,7 +21,7 @@ CAPS = ("Вот что я умею (напиши команду в чат):\n"
         "⏰ Время — «таймер на 10 минут», «будильник на 7:30», «напомни через час позвонить»\n"
         "⚙️ Настройки — «открой настройки Bluetooth» (любой раздел Windows)\n"
         "⚡ Питание — «заблокируй пк», «сон», «выключи/перезагрузи пк» (спрошу подтверждение)\n"
-        "📋 Буфер обмена — «переведи то, что в буфере»\n"
+        "📋 Буфер обмена — «что в буфере?», «исправь текст из буфера»\n"
         "💻 Состояние ПК — «заряд батареи», «что грузит процессор», «сколько места на диске»\n"
         "💬 И просто болтать!")
 
@@ -44,67 +43,6 @@ def screenshot():
         shot = s.grab(s.monitors[0])
     Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX").save(path)
     return Reply(f"Готово! Скриншот сохранён ({path}) и скопирован в буфер обмена 📸", "surprised", image=path)
-
-
-# ---------- поиск файлов ----------
-STOP = set("найди найти поищи поиск искать ищи файл файлы файла документ документы мне пожалуйста на компьютере "
-           "пк по в с про где лежит называется название именем папку папка диске скачанный скачанные".split())
-EXT = {"pdf": (".pdf",), "word": (".docx", ".doc"), "ворд": (".docx", ".doc"), "docx": (".docx",),
-       "excel": (".xlsx", ".xls"), "эксель": (".xlsx", ".xls"), "таблиц": (".xlsx", ".xls", ".csv"),
-       "презентац": (".pptx", ".ppt"), "картинк": (".png", ".jpg", ".jpeg", ".gif", ".webp"),
-       "фото": (".png", ".jpg", ".jpeg", ".heic"), "изображен": (".png", ".jpg", ".jpeg", ".gif", ".webp"),
-       "видео": (".mp4", ".mkv", ".avi", ".mov"), "музык": (".mp3", ".wav", ".flac"), "текстов": (".txt", ".md")}
-SKIP_DIRS = {"node_modules", "appdata", "$recycle.bin", "__pycache__", "site-packages"}
-
-
-def _user_dirs():
-    out = []
-    for n in ("Desktop", "Documents", "Downloads", "Pictures", "Videos", "Music"):
-        for base in (HOME, os.path.join(HOME, "OneDrive")):
-            p = os.path.join(base, n)
-            if os.path.isdir(p) and p not in out:
-                out.append(p)
-    return out
-
-
-def find_files(ql, limit=10, seconds=8):
-    exts, stems = [], []
-    for w in re.findall(r"[\w.\-]+", ql):
-        if w in STOP:
-            continue
-        hit = next((v for k, v in EXT.items() if w.startswith(k)), None)
-        if hit:
-            exts += hit
-        else:
-            stems.append(w[:-2] if len(w) > 5 else w)
-    if not exts and not stems:
-        return Reply("Что искать? Например: «найди файл договор pdf» 📁", "curious")
-    found, deadline = [], time.time() + seconds
-    for root in _user_dirs():
-        for dp, dn, fn in os.walk(root):
-            dn[:] = [d for d in dn if not d.startswith(".") and d.lower() not in SKIP_DIRS]
-            for f in fn:
-                low = f.lower()
-                if exts and not low.endswith(tuple(exts)):
-                    continue
-                if all(s in low for s in stems):
-                    p = os.path.join(dp, f)
-                    try:
-                        found.append((os.path.getmtime(p), p))
-                    except OSError:
-                        pass
-            if time.time() > deadline:
-                break
-    if not found:
-        return Reply("Ничего не нашёл 😔 Попробуй другое слово.", "sad")
-    found.sort(reverse=True)
-    rows = "".join(
-        f'<a href="mico-open:{quote(p)}">{html.escape(os.path.basename(p))}</a> '
-        f'<a href="mico-dir:{quote(p)}">📂</a><br><small style="color:#888">{html.escape(os.path.dirname(p))}</small><br>'
-        for _, p in found[:limit])
-    return Reply(f"Нашёл {len(found)}", "happy",
-                 html=f"Нашёл {len(found)} (показываю {min(limit, len(found))} новейших). Нажми на имя, чтобы открыть, "
-                      f"или на 📂, чтобы показать в папке:<br>{rows}")
 
 
 # ---------- напоминания ----------

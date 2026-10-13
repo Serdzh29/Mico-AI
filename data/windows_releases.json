@@ -37,9 +37,9 @@
     {
       "version": "26H2",
       "released": "2026-09-29",
-      "source": "Microsoft: центр сообщений MC1482225 (29 сентября 2026)",
-      "home_pro_end": null,
-      "note": "Срок поддержки в официальной таблице, которую я нашёл, не подтверждён. Не называть дату как точную."
+      "source": "Microsoft Learn, «Информация о выпуске Windows 11» (release health)",
+      "home_pro_end": "2028-10-10",
+      "note": "Срок поддержки Home и Pro подтверждён страницей Microsoft release health."
     }
   ],
   "builds": [
@@ -161,15 +161,15 @@
       "version": "26H2",
       "channel": "release",
       "date": "2026-09-29",
-      "source": "WindowsMode (сайт-пересказ). Не подтверждено Microsoft: в официальных источниках номер сборки выпуска не совпал",
+      "source": "Microsoft Learn, «Информация о выпуске Windows 11» (release health): доступность 29 сентября 2026, сборка 26300.9457",
       "highlights": [
         "Резервное копирование параметров.",
         "Действия приложений на панели задач.",
         "Более быстрый Проводник (раздел «Главная»).",
         "Меньше перезагрузок при обновлениях."
       ],
-      "official": false,
-      "tier": "community"
+      "official": true,
+      "tier": "official"
     },
     {
       "build": "28000",

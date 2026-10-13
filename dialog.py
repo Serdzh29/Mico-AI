@@ -15,16 +15,23 @@ FOLLOWUP_RE = re.compile(
 
 
 class Dialog:
-    def __init__(self, window=WINDOW_SEC, max_turns=MAX_TURNS):
+    def __init__(self, window=WINDOW_SEC, max_turns=MAX_TURNS, persist=None):
         self.window, self.max_turns = window, max_turns
         self.turns = []                                   # [(время, роль: 'user' | 'mico', текст)]
+        self.persist = persist                            # необязательно: fn(время, роль, текст) — журнал на диске
 
     def add(self, role, text, now=None):
         text = (text or "").strip()
         if not text:
             return
-        self.turns.append((now or time.time(), role, text[:MAX_CHARS]))
+        ts = now or time.time()
+        self.turns.append((ts, role, text[:MAX_CHARS]))
         del self.turns[:-self.max_turns]
+        if self.persist:
+            try:
+                self.persist(ts, role, text)
+            except Exception:
+                pass                                      # журнал не должен ломать разговор
 
     def recent(self, now=None):
         """Реплики, которые ещё помнятся (не старше окна), от старых к новым."""
