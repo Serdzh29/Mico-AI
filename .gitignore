@@ -6,6 +6,8 @@ venv/
 build/
 dist/
 *.spec
+*.exe
+.pytest_cache/
 *.egg-info/
 
 # Данные и журналы пользователя (в проекте их быть не должно)
@@ -15,6 +17,10 @@ config.json
 key.bin
 models/
 *.zip.part
+start.log
+launch.log
+mico.pid
+mico_task.xml
 
 # Редакторы и система
 .vscode/

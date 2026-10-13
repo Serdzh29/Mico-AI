@@ -27,15 +27,15 @@ def check(cond, msg=""):
         raise AssertionError(msg)
 
 # --- пути не попадают в отчёт ---
-check(G.mask_paths(r"Файл C:\Users\serge\Documents\договор.pdf и D:\Игры\a.exe") == "Файл <путь> и <путь>")
-check("serge" not in G.mask_paths(r"Ошибка в C:\Users\serge\x.py"), "имя пользователя скрыто")
+check(G.mask_paths(r"Файл C:\Users\user\Documents\договор.pdf и D:\Игры\a.exe") == "Файл <путь> и <путь>")
+check("user" not in G.mask_paths(r"Ошибка в C:\Users\user\x.py"), "имя пользователя скрыто")
 
 # --- текст отчёта: ошибка и отзыв ---
 bug = G.build_body("bug", "2026.10.1303", "beta", "Windows, сборка 10.0.26340",
-                   {"workspace": 2, "clipboard_search": 0}, log_tail=r"Error at C:\Users\serge\a.py")
+                   {"workspace": 2, "clipboard_search": 0}, log_tail=r"Error at C:\Users\user\a.py")
 check("2026.10.1303 (beta)" in bug and "Рабочее место — 2" in bug, bug)
 check("История копирования" not in bug, "нулевые счётчики не выводим")
-check("serge" not in bug and "<путь>" in bug, "журнал без путей")
+check("user" not in bug and "<путь>" in bug, "журнал без путей")
 check("## Что случилось" in bug and "## Как воспроизвести" in bug, bug)
 check("Журнал ошибок" not in G.build_body("bug", "v", "beta", "w", {}), "журнал только по выбору")
 

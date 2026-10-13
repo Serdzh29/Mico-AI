@@ -1,5 +1,7 @@
 # 🌟 Mico — локальный ИИ-компаньон для Windows
 
+[![Tests](https://github.com/Serdzh29/Mico-AI/actions/workflows/tests.yml/badge.svg)](https://github.com/Serdzh29/Mico-AI/actions/workflows/tests.yml)
+
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6) ![Python](https://img.shields.io/badge/python-3.10%2B-3776AB) ![License](https://img.shields.io/badge/license-MIT-green)
 
 **Mico** живёт на рабочем столе в виде милого персонажа 💛. Он понимает текст, управляет Windows, смотрит на экран, помнит, чем ты занимался, и **всё работает на твоём компьютере**: без облаков и без отправки данных.
@@ -177,9 +179,11 @@ Mico появится на рабочем столе. Напиши ему «пр
 
 ## 👩‍💻 Для разработчиков
 
-- Версия и история изменений — в `version.py`. После изменения выполни `python make_changelog.py`, чтобы обновить `CHANGELOG.md`.
-- Перед выпуском запусти `python tests/run_all.py`. Тесты проверяют логику без Windows и моделей.
-- Сборка `Mico.exe`: `build_exe.bat` на ПК с Python. Файл появится в `dist\Mico.exe`.
+- Правила вклада, запуск и тесты — в [CONTRIBUTING.md](CONTRIBUTING.md). Уязвимости — в [SECURITY.md](SECURITY.md) (приватно).
+- Тесты: `python tests/run_all.py`. Они работают без Windows и моделей и запускаются в GitHub Actions на каждый push.
+- Версия и история — в `version.py`. После изменения выполни `python make_changelog.py`, чтобы обновить [CHANGELOG.md](CHANGELOG.md).
+- Сборка `Mico.exe` на своём ПК: `build_exe.bat`, файл появится в `dist\Mico.exe`.
+- Релиз: создай тег `vВЕРСИЯ` (например `v2026.10.1305`) и отправь его. Workflow `Release` соберёт `Mico.exe`, прогонит тесты и опубликует релиз.
 
 ---
 

@@ -740,7 +740,7 @@ class SettingsDialog(QDialog):
         f.addRow("Поиск в интернете", self.se)
         self.greet = WrapCheck("Здороваться при включении ПК (день/вечер, погода, что делал вчера)")
         self.greet.setChecked(cfg["greet_on_start"])
-        self.auto = WrapCheck("Запускать при включении ПК и при разблокировке (Планировщик Windows)")
+        self.auto = WrapCheck("Запускать вместе с Windows (вход в систему)")
         self.auto.setChecked(autostart.status()[0])        # показываем то, что реально стоит в Планировщике
         self.keep = QComboBox()                     # сколько хранить историю; «всегда» — без очистки
         for days, text in ((7, "7 дней"), (30, "30 дней"), (90, "90 дней"), (365, "365 дней"), (0, "всегда")):
@@ -1227,6 +1227,25 @@ class SettingsDialog(QDialog):
                 c.insertItem(0, name)
 
     def accept(self):
+        """Сохранение: любая ошибка показывается человеку с причиной и пишется в crash.log — не молчаливый отказ."""
+        try:
+            done = self._apply()
+        except Exception as e:
+            import traceback
+            try:
+                folder = os.path.join(APPDIR)
+                os.makedirs(folder, exist_ok=True)
+                with open(os.path.join(folder, "crash.log"), "a", encoding="utf-8") as f:
+                    f.write(traceback.format_exc() + "\n")
+            except OSError:
+                pass
+            QMessageBox.warning(self, "Настройки", f"Не получилось сохранить настройки: {e}\n\n"
+                                "Подробности записаны в crash.log в папке Mico (%APPDATA%\\Mico).")
+            return
+        if done:
+            super().accept()
+
+    def _apply(self):
         self._save_chips()
         self.cfg.update(settings_size=self.size_pick.currentData(),
                         menu_items=self._menu_ids(), menu_max=self.mmax.value())
@@ -1271,10 +1290,10 @@ class SettingsDialog(QDialog):
             save_cfg(self.cfg)
         except OSError as e:                       # не записали — окно не закрываем, чтобы пользователь увидел причину
             QMessageBox.warning(self, "Настройки", f"Не удалось записать настройки: {e}")
-            return
+            return False
         if not ok:
             QMessageBox.warning(self, "Автозапуск", msg)
-        super().accept()
+        return True
 
     def reject(self):
         self.cfg.update(self.orig)

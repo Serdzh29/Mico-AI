@@ -85,11 +85,8 @@ M.save_cfg = lambda cfg: saved.append(dict(cfg))
 M.QMessageBox = types.SimpleNamespace(warning=lambda *a, **k: warned.append(a))
 
 def run_accept(f):
-    try:
-        M.SettingsDialog.accept(f)
-    except TypeError as e:
-        if "super" not in str(e):                  # только ошибка заглушки на super() допустима
-            raise
+    """Логика сохранения — в _apply(); accept() только закрывает окно при успехе. Qt здесь не нужен."""
+    return M.SettingsDialog._apply(f)
 
 autostart.install = lambda *a, **k: (_ for _ in ()).throw(OSError("schtasks недоступен"))
 autostart.remove = lambda *a, **k: (True, "")
@@ -118,4 +115,10 @@ src = open(_os.path.join(ROOT, "main.py"), encoding="utf-8").read()
 body = src.split("    def on_reminder(self, text):")[1].split("    def on_link")[0]
 check("self.blob.wake(silent=True)" in body, "on_reminder будит Mico тихо")
 check("woke" not in body and "open_chat" not in body, "чат при уведомлении не открывается")
+# 4. любая ошибка при сохранении — не молчит: показывается пользователю с причиной
+f = make_dialog()
+f._apply = lambda: (_ for _ in ()).throw(KeyError("бракованное поле"))
+warned.clear()
+M.SettingsDialog.accept(f)
+check(warned and "бракованное поле" in str(warned[-1]), "ошибка должна показываться пользователю")
 print("ALL OK")
