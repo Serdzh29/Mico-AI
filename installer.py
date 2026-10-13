@@ -273,14 +273,30 @@ def _desktop_shortcut(create):
     winctl.ps(ps, timeout=30)
 
 
+REMOVER_PATH = os.path.join(INSTALL_DIR, "remove_mico.cmd")
+
+
+def _write_remover():
+    """Скрипт удаления рядом с программой: работает, даже если Mico.exe сам не запускается."""
+    import remover
+    os.makedirs(INSTALL_DIR, exist_ok=True)
+    with open(REMOVER_PATH, "w", encoding="ascii", newline="") as f:
+        f.write(remover.script(INSTALL_DIR, APPDIR))
+
+
 def _register_uninstall():
     """Регистрирует Mico в «Параметры → Приложения», чтобы его можно было удалить штатным способом."""
     import winreg
+    try:
+        _write_remover()
+        uninstall_cmd = f'"{REMOVER_PATH}"'
+    except OSError:
+        uninstall_cmd = f'"{INSTALL_EXE}" --uninstall'     # запасной вариант, если файл не записался
     k = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY, 0, winreg.KEY_SET_VALUE)
     values = {"DisplayName": "Mico", "DisplayVersion": _version(), "Publisher": "Mico",
               "InstallLocation": INSTALL_DIR,
               "DisplayIcon": ICON_PATH if os.path.exists(ICON_PATH) else INSTALL_EXE,
-              "UninstallString": f'"{INSTALL_EXE}" --uninstall'}
+              "UninstallString": uninstall_cmd}
     for name, value in values.items():
         winreg.SetValueEx(k, name, 0, winreg.REG_SZ, value)
     winreg.SetValueEx(k, "NoModify", 0, winreg.REG_DWORD, 1)
