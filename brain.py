@@ -1,8 +1,8 @@
 """Мозг Mico: локальные модели через Ollama (только 127.0.0.1) + маршрутизация запросов."""
-import base64, html as html_mod, io, json, os, re, time
+import base64, html as html_mod, io, json, os, re, time, webbrowser
 import mss, requests, win32gui
 from PIL import Image
-import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, indexer, knowledge, notes, osagent, planner, pomodoro, schedule, sorter, todo, typo, windows_info, workspace
+import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, indexer, knowledge, notes, osagent, planner, pomodoro, schedule, sorter, todo, typo, updatecheck, version, windows_info, workspace
 import winctl as W
 from actions import Reply
 from emotions import detect_emotion, split_mood
@@ -360,6 +360,26 @@ class Brain:
         use[feature] = use.get(feature, 0) + 1
         self.save_cfg()
 
+    MANUAL_UPDATE = re.compile(r"есть ли (?:новая |новые )?верси\w* (?:mico|мико)"
+                               r"|проверь (?:новую )?верси\w* (?:mico|мико)"
+                               r"|проверь обновлени\w* (?:mico|мико)")
+
+    def _manual_update(self, ql):
+        """«Есть ли новая версия Mico?» — проверяем сейчас, не дожидаясь суточной проверки."""
+        if not self.MANUAL_UPDATE.fullmatch(ql.strip(" .!?")):
+            return None
+        info = updatecheck.fetch_latest()
+        if info is None:
+            return Reply("Не смог проверить: нет связи с GitHub или релизов пока нет. Попробуй позже.", "worried")
+        self.cfg["update_checked_at"] = time.time()
+        self.save_cfg()
+        remote = updatecheck.version_of(info["tag"])
+        if not remote or not updatecheck.is_newer(remote, version.APP_VERSION):
+            return Reply(f"Нет новой версии: у тебя последняя, {version.APP_VERSION} 👍", "happy")
+        url = info["url"]
+        return commands._ask(f"Вышла версия {remote}, у тебя {version.APP_VERSION}. Открыть страницу загрузки?",
+                             lambda: (webbrowser.open(url), Reply("Открыл страницу загрузки 🔗", "happy"))[1])
+
     def _beta_command(self, q, ql):
         """Бета-функции: рабочее место, история копирования, итог дня. None — это не про них."""
         if features.enabled("workspace", self.cfg):
@@ -535,6 +555,9 @@ class Brain:
         ident = identity.answer(q)                               # кто тебя создал?
         if ident:
             return ident
+        upd = self._manual_update(ql)                            # есть ли новая версия Mico?
+        if upd:
+            return upd
         beta = self._beta_command(q, ql)                         # бета: рабочее место, копирование, итог дня
         if beta:
             return beta
