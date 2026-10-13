@@ -2,7 +2,7 @@
 import base64, html as html_mod, io, json, os, re, time, webbrowser
 import mss, requests, win32gui
 from PIL import Image
-import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, indexer, knowledge, notes, osagent, planner, pomodoro, schedule, sorter, todo, typo, updatecheck, version, windows_info, workspace
+import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, indexer, knowledge, notes, osagent, phrase, smart, planner, pomodoro, schedule, sorter, todo, typo, updatecheck, version, windows_info, workspace
 import winctl as W
 from actions import Reply
 from emotions import detect_emotion, split_mood
@@ -168,6 +168,7 @@ class Brain:
     def ask(self, q):
         """Понимает опечатки: «открй» → «открой». Учится только на том, что пользователь пишет Mico."""
         fixed, changes = self.typo.correct(q)
+        fixed = phrase.canonical(fixed) or fixed                   # «давай помодоро!» → понятная форма
         self._handled = False
         r = self._ask(fixed)
         self.dialog.add("user", fixed)                                              # помним диалог, в том числе команды
@@ -268,15 +269,16 @@ class Brain:
                 return Reply(f"Записал: «{value}». Скажи «что я записывал сегодня», чтобы посмотреть.", "happy")
             return Reply(notes.format_list(self.store.list_notes(), value), "happy")
         s = ql.strip()
-        pomo_on = features.enabled("pomodoro", self.cfg)
-        if pomo_on and re.fullmatch(r"(помодоро|запусти помодоро|начни помодоро|pomodoro)", s):
-            ok = self.pomo.start()
-            return Reply("Запускаю помодоро: 25 минут работы, потом напомню про перерыв."
-                         if ok else "Помодоро уже идёт.", "happy")
-        if pomo_on and re.search(r"(стоп|останови|отмени|выключи) помодоро", s):
-            return Reply("Помодоро остановлен." if self.pomo.stop() else "Помодоро сейчас не идёт.", "happy")
-        if pomo_on and re.search(r"сколько помодоро|помодоро сегодня", s):
-            return Reply(f"Сегодня завершено циклов помодоро: {self._pomo_today()}.", "happy")
+        if features.enabled("pomodoro", self.cfg):
+            intent = phrase.pomodoro_intent(q)                   # помодоро в любой форме, не только по точной фразе
+            if intent == "start":
+                ok = self.pomo.start()
+                return Reply("Запускаю помодоро: 25 минут работы, потом напомню про перерыв."
+                             if ok else "Помодоро уже идёт.", "happy")
+            if intent == "stop":
+                return Reply("Помодоро остановлен." if self.pomo.stop() else "Помодоро сейчас не идёт.", "happy")
+            if intent == "status":
+                return Reply(f"Сегодня завершено циклов помодоро: {self._pomo_today()}.", "happy")
         if re.fullmatch(r"(проверь (mico|мико|себя|окружение|настройки)|что не так|диагностика|проверка окружения)", s):
             return Reply(self.environment(), "curious")
         return None
@@ -549,6 +551,24 @@ class Brain:
                 self.store.add_action(time.time(), q.strip())
             except Exception:
                 pass
+        if phrase.is_greeting(q):                                # «доброе утро!», «привет 😊»
+            return Reply(phrase.greeting_text(kind=phrase.greeting_kind(q)), "happy")
+        refusal = smart.safety_refusal(ql)                       # опасное — не выполняем, объясняем
+        if refusal:
+            return Reply(refusal, "curious")
+        calc = smart.calculate(q)                                # «сколько будет 17 умножить на 23»
+        if calc:
+            return Reply(calc, "happy")
+        if smart.is_intro_question(ql):                          # «ты кто?»
+            return Reply(smart.INTRO, "happy")
+        if smart.is_toggle_question(ql):                         # «какие настройки ты умеешь переключать?»
+            return Reply(smart.toggles_overview(components.TOGGLES), "happy")
+        bare = smart.bare_verb_question(q)                       # «выключи» без объекта — уточняем
+        if bare:
+            return Reply(bare, "curious")
+        small = smart.smalltalk(q)                               # «спасибо», «ты молодец», «мне грустно»
+        if small:
+            return Reply(small[0], small[1])
         steps = custom.find(q, self.cfg.get("custom_phrases", []))
         if steps:
             return self._run_steps(steps)
@@ -580,6 +600,9 @@ class Brain:
             if r:
                 self._handled = True
                 return r
+            cap = smart.capability_question(ql)                  # «а ты умеешь музыку включать?»
+            if cap:
+                return Reply(cap, "happy")
             if re.search(r"\b(найди|найти|поищи|ищи|искать|где|покажи|какие|какой|какая)\b", ql):
                 r = self._index_reply(q)                 # сначала — по индексу компьютера
                 if r:

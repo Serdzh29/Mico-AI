@@ -1,7 +1,7 @@
 """Быстрые заметки: «запиши: купить молоко», «что я записывал сегодня». Хранятся зашифрованно в Store."""
 import re, time
 
-ADD = re.compile(r"^(запиши|заметка|запомни заметку)\s*[:,]?\s*(.+)$")
+ADD = re.compile(r"^(?:запиши|заметка|запомни заметку|запомни)\s*[:,]\s*(?P<a>.+)$|^(?:запиши|заметка|запомни заметку)\s+(?P<b>.+)$")
 LIST = re.compile(r"^(что я записывал|мои заметки|покажи заметки|заметки)(\s+сегодня)?\??$")
 
 
@@ -9,8 +9,10 @@ def parse(ql):
     """('add', текст) | ('list', 'today'|'all') | None."""
     s = " ".join(ql.lower().replace("ё", "е").split())
     m = ADD.match(s)
-    if m and m.group(2).strip():
-        return "add", m.group(2).strip()[:500]
+    if m:
+        text = (m.group("a") or m.group("b") or "").strip()            # текст из того варианта, что совпал
+        if text:
+            return "add", text[:500]
     m = LIST.match(s)
     if m:
         return "list", "today" if m.group(2) else "all"

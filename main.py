@@ -57,7 +57,7 @@ from PyQt6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox, Q
                              QVBoxLayout, QScrollArea, QSizePolicy,
                              QWidget)
 import psutil
-import actions, autostart, betaprogram, clipbuf, daysum, ghreport, schedule, menu_items, features, capabilities, chips, commands, custom, feedback, greeting, hotkeys, breaks, indexer, initiative, mailreport, report, reminders, sleepmode, theme, updatecheck, version, windows_info
+import actions, autostart, betaprogram, phrase, clipbuf, daysum, ghreport, schedule, menu_items, features, capabilities, chips, commands, custom, feedback, greeting, hotkeys, breaks, indexer, initiative, mailreport, report, reminders, sleepmode, theme, updatecheck, version, windows_info
 import winctl as W
 from actions import Reply
 from blob import Blob
@@ -123,8 +123,9 @@ PID_FILE = os.path.join(APPDIR, "mico.pid")
 
 
 def hello(now=None):
-    h = time.localtime(now or time.time()).tm_hour
-    return "Добрый день! ☀️" if 5 <= h < 17 else "Добрый вечер! 🌙"
+    """Приветствие при запуске: утро, день, вечер или ночь — с эмодзи и восклицанием."""
+    import phrase
+    return phrase.greeting_text(now)
 
 
 def _alive_instance():

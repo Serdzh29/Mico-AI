@@ -629,7 +629,7 @@ def suggest(ql, limit=3):
         if len(word) < 5:
             continue
         for k, t in _TOGGLE_KEYS:
-            if len(k) >= 5 and difflib.SequenceMatcher(None, word[:len(k)], k).ratio() >= 0.6:
+            if len(k) >= 6 and len(word) >= 6 and difflib.SequenceMatcher(None, word[:len(k)], k).ratio() >= 0.75:
                 if t.name not in found:
                     found.append(t.name)
     return found[:limit]

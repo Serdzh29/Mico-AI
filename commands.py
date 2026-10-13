@@ -830,7 +830,7 @@ def _toggle_fallback(ql, ctx):
     if sp:
         os.startfile(sp[0])
         return Reply(f"Прямого переключателя для этого нет — открыл раздел «{sp[1]}» ⚙️", "happy")
-    names = components.suggest(ql)
+    names = [] if re.search(r"\b(умеешь|можешь)\b", ql) else components.suggest(ql)
     if names:
         return Reply("Не знаю такого переключателя. Возможно, ты имел в виду: "
                      + ", ".join(f"«{n}»" for n in names) + "? 🤔", "curious")
