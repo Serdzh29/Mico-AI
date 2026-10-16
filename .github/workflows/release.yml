@@ -30,7 +30,7 @@ jobs:
           if (Test-Path "assets/mico.ico") { $icon = @("--icon", "assets/mico.ico") }
           python -m PyInstaller --noconsole --onefile --clean --name Mico @data @icon `
             --hidden-import win32crypt --hidden-import win32com.client --hidden-import pythoncom `
-            --hidden-import pywintypes --exclude-module tkinter main.py
+            --hidden-import pywintypes --collect-all vosk --collect-all sounddevice --exclude-module tkinter main.py
       - name: Файл сборки как артефакт
         uses: actions/upload-artifact@v4
         with:

@@ -1,5 +1,5 @@
 """Мозг Mico: локальные модели через Ollama (только 127.0.0.1) + маршрутизация запросов."""
-import base64, html as html_mod, io, json, os, re, threading, time, webbrowser
+import base64, io, json, os, re, threading, time, webbrowser
 import mss, requests, win32gui
 from PIL import Image
 import actions, capabilities, cleanup, clipbuf, commands, components, custom, daysum, dialog, diagnose, features, health, identity, knowledge, notes, osagent, phrase, smart, planner, pomodoro, schedule, sorter, todo, typo, updatecheck, version, windows_info, workspace, recall, intent, chatdigest
@@ -67,7 +67,6 @@ class Brain:
         extra = {w for t in components.TOGGLES for k in t.keys for w in k.split() if len(w) >= 4}
         self.typo = typo.Corrector(store, extra)               # опечатки и свой словарь
         self.on_command = lambda q: None                       # main.py: учёт кнопок и команд
-        self._idx = None                                       # кэш индекса (расшифрованный)
         self._kb = None                                        # база знаний Mico (статьи из knowledge/)
         self.save_cfg = lambda: None                           # main.py: сохранить настройки
         self.pomo = pomodoro.Pomodoro(lambda t: self.notify(t), self._pomo_cycle)
@@ -243,6 +242,12 @@ class Brain:
         if changes and self._handled and r.text:
             r.text = typo.note(changes) + r.text
         return r
+
+    def quick_answer(self, prompt, image_b64=None):
+        """Короткий вопрос вне разговора (файл, буфер, ошибка, окно): ответ не попадает в память диалога.
+        Картинка уходит только в локальную модель для изображений."""
+        model = self.cfg["vision_model"] if image_b64 else self.cfg["text_model"]
+        return self._chat(prompt, model, image_b64=image_b64)
 
     def _agent_call(self, name, args):
         """Действие на компьютере: всё, что меняет систему, выполняется только после «да»."""

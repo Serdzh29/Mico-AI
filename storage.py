@@ -150,22 +150,6 @@ class Store:
             rows = self.db.execute("SELECT body FROM feedback ORDER BY ts DESC LIMIT ?", (int(limit),)).fetchall()
         return [_json.loads(self.f.decrypt(r[0]).decode()) for r in rows]
 
-    def replace_index(self, records):
-        """Полностью заменяет индекс. Имена и пути шифруются."""
-        with self.lock:
-            self.db.execute("DELETE FROM index_items")
-            self.db.executemany(
-                "INSERT INTO index_items VALUES(?,?,?,?,?,?)",
-                [(self._key(r["path"]), r["kind"], self._enc(r["name"]), self._enc(r["path"]),
-                  int(r["mtime"]), int(r["size"])) for r in records])
-            self.db.commit()
-
-    def load_index(self):
-        with self.lock:
-            rows = self.db.execute("SELECT kind, name, path, mtime, size FROM index_items").fetchall()
-        return [{"kind": k, "name": self.f.decrypt(n).decode(), "path": self.f.decrypt(p).decode(),
-                 "mtime": m, "size": s} for k, n, p, m, s in rows]
-
     def add_reminder(self, rid, due, text, rule=None):
         with self.lock:
             self.db.execute("INSERT OR REPLACE INTO reminders(id, due, text, rule) VALUES(?,?,?,?)",

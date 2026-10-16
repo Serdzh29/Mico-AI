@@ -1,7 +1,6 @@
-"""Действия Mico: скриншоты, поиск файлов, напоминания, состояние ПК. Команды Windows — в commands.py."""
+"""Действия Mico: скриншоты, напоминания, состояние ПК. Команды Windows — в commands.py."""
 import datetime, html, os, re, subprocess, time
 from dataclasses import dataclass
-from urllib.parse import quote
 import mss, psutil
 from PIL import Image
 

@@ -1,7 +1,9 @@
 """Mico: мягкий blob с эмоциями, анимациями ожидания (моргает, крутится, становится сердечком),
 анимацией «думает» и взглядом вниз, пока пользователь печатает."""
 import math, random, time
+import intel
 import sleepmode
+import theme                        # единый шрифт Mico (Inter)
 from PyQt6.QtCore import Qt, QTimer, QPointF, QPoint, QRectF, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QPainterPath, QPen, QCursor, QGuiApplication, QFont
 from PyQt6.QtWidgets import QWidget
@@ -31,6 +33,9 @@ class Blob(QWidget):
     moved = pyqtSignal()
     slept = pyqtSignal()                  # Mico заснул: чат нужно спрятать
     woke = pyqtSignal()                   # Mico проснулся от клика: чат нужно вернуть
+    awake = pyqtSignal()                  # Mico проснулся по любой причине (клик, чат, WI): островок сна убирается
+    dropped = pyqtSignal(list)            # на Mico перетащили файлы (пути) — WI читает их
+    WAKE_SETTLE_MS = 650                  # после пробуждения прыжок длится около полсекунды: чат открываем после него
 
     def __init__(self, cfg):
         super().__init__()
@@ -38,6 +43,7 @@ class Blob(QWidget):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint |
                             Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAcceptDrops(True)
         self.t0 = time.time()
         self._fonts = {}                                   # шрифты кешируем, а не создаём каждый кадр
         self.mood, self.mood_until = "idle", 0
@@ -52,7 +58,9 @@ class Blob(QWidget):
         self.lean = 0.0                       # наклон при движении к углу
         self.look_at = None                   # глобальная точка, на которую смотрит Mico (строка ввода)
         self._fx, self._fy, self._last_glide = 0.0, 0.0, time.time()   # плавные (дробные) координаты
-        self.blink_at, self.blink_until = time.time() + 3, 0
+        self.blink_at, self.blink_until, self.blink_start = time.time() + 3, 0, 0
+        self.lid = 1.0                        # открытость глаз: 1 — открыты, меньше — прикрыты (плавно, без рывков)
+        self.locked = False                   # на время перехода WI движением управляет Intel, а не _glide
         self.last_cursor, self.last_input = QCursor.pos(), time.time()
         self.asleep = False                   # спит ли Mico
         self.size_k = 1.0                     # доля размера: 1 — обычный, sleepmode.SLEEP_SCALE — во сне
@@ -93,18 +101,23 @@ class Blob(QWidget):
         self.mood, self.mood_until = "sleepy", 0
         self.slept.emit()
 
+    def placement(self):
+        """Где Mico стоит по настройкам: в режиме Windows Intelligence — внизу по центру."""
+        return intel.placement_for(self.cfg.get("assist_style"), self.cfg.get("placement"))
+
     def wake(self, silent=False, moved=False):
         """Просыпается: возвращается на прежнее место (если его не перетащили), радуется и открывает чат."""
         if not self.asleep:
             return
         self.asleep = False
         self.touch()
-        if not moved and self.rest_pos is not None and sleepmode.home_corner(False, self.cfg.get("placement"), None) is None:
+        if not moved and self.rest_pos is not None and sleepmode.home_corner(False, self.placement(), None) is None:
             self.move(self.rest_pos)            # на прежнее место; если выбран угол — плавно доведёт до него _glide
         self.rest_pos = None
         self.set_mood("happy", 5)
         self.jump(260)
         self.squash_v += 0.8
+        self.awake.emit()
         if not silent:
             self.woke.emit()
 
@@ -126,10 +139,14 @@ class Blob(QWidget):
         """Плавно едет в свой угол (во сне — угол для сна, иначе — выбранное положение). Возвращает наклон (lean)."""
         dt = min(0.05, max(0.001, now - self._last_glide))
         self._last_glide = now
-        if self.drag is not None or abs(self.x() - self._fx) > 3 or abs(self.y() - self._fy) > 3:
+        if self.drag is not None or self.locked or abs(self.x() - self._fx) > 3 or abs(self.y() - self._fy) > 3:
             self._fx, self._fy = float(self.x()), float(self.y())      # перетащили или сдвинули сами
-        corner = sleepmode.home_corner(self.asleep, self.cfg.get("placement"), self.cfg.get("sleep_corner"))
+        if self.locked:                                  # переход WI ведёт Intel: здесь не двигаем
+            return 0.0
+        corner = sleepmode.home_corner(self.asleep, self.placement(), self.cfg.get("sleep_corner"))
         if corner is None or self.drag is not None:      # стоит, где поставил, или его сейчас тащат
+            return 0.0
+        if self.asleep and self.placement() == sleepmode.SPOT:   # Intelligence: во сне не уходит в угол, а гаснет
             return 0.0
         target = QPoint(*sleepmode.corner_spot(self._screen_avail(), self.width(), corner))
         dx, dy = target.x() - self._fx, target.y() - self._fy
@@ -187,7 +204,12 @@ class Blob(QWidget):
         if cur != self.last_cursor:
             self.last_cursor, self.last_input = cur, now
         if now > self.blink_at:
-            self.blink_until, self.blink_at = now + 0.12, now + random.uniform(3, 6)
+            self.blink_start, self.blink_until = now, now + intel.BLINK_SEC
+            self.blink_at = now + random.uniform(3, 6)
+        close = intel.blink_close((now - self.blink_start) / intel.BLINK_SEC) if now < self.blink_until else 0.0
+        if self.anim and self.anim[0] == "blink2":            # двойное моргание — тоже плавно
+            close = max(close, intel.double_blink_close(min(1.0, (now - self.anim[1]) / self.anim[2])))
+        self.lid = 1.0 - 0.92 * close                          # 0.08 — почти закрыт, не полностью
         if self.anim and now > self.anim[1] + self.anim[2]:
             self.anim = None
         if (not self.anim and self.effective_mood() == "idle" and now > self.next_idle and not self.talking
@@ -222,6 +244,19 @@ class Blob(QWidget):
         self.squash_v += (-60 * self.squash - 8 * self.squash_v) * dt
         self.squash += self.squash_v * dt
         self.update()
+
+    def dragEnterEvent(self, e):
+        """Файл перетащили на Mico: принимаем, если это файлы с диска."""
+        if any(u.isLocalFile() for u in e.mimeData().urls()):
+            e.acceptProposedAction()
+        else:
+            e.ignore()
+
+    def dropEvent(self, e):
+        paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
+        if paths:
+            e.acceptProposedAction()
+            self.dropped.emit(paths)
 
     def moveEvent(self, e):
         self.moved.emit()
@@ -382,7 +417,6 @@ class Blob(QWidget):
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         typing = time.time() < self.typing_until
         look = self._look(fx, fy, R, mood, u, anim)
-        blink = time.time() < self.blink_until or (anim == "blink2" and (u < 0.25 or 0.4 < u < 0.65))
 
         p.setPen(nopen)                                       # румянец
         p.setBrush(QColor(255, 120, 120, 160 if mood in ("shy", "proud") else 105 if mood in ("happy", "love", "laugh", "excited") else 55))
@@ -396,7 +430,7 @@ class Blob(QWidget):
             squint = mood == "curious" and s == -1
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.setPen(pen)
-            if mood == "sleepy" or blink or (mood == "playful" and s == 1):      # подмигивание — правый глаз
+            if mood == "sleepy" or (mood == "playful" and s == 1):      # подмигивание — правый глаз
                 p.drawLine(QPointF(ex - ew, ey), QPointF(ex + ew, ey))
             elif mood in ("happy", "laugh", "love", "proud", "playful"):
                 p.drawArc(QRectF(ex - ew * 1.15, ey - eh * 0.5, ew * 2.3, eh * 1.5), 0, 180 * 16)
@@ -409,9 +443,9 @@ class Blob(QWidget):
                 sq = 0.75 if (typing or mood == "angry") else 1.0
                 p.setBrush(pupil)
                 p.setPen(nopen)
-                p.drawEllipse(QPointF(ex, ey), ew * big, eh * big * sq)
+                p.drawEllipse(QPointF(ex, ey), ew * big, eh * big * sq * self.lid)
                 p.setBrush(shine)
-                p.drawEllipse(QPointF(ex + ew * 0.3, ey - eh * 0.3 * sq), ew * 0.32 * big, ew * 0.32 * big)
+                p.drawEllipse(QPointF(ex + ew * 0.3, ey - eh * 0.3 * sq * self.lid), ew * 0.32 * big, ew * 0.32 * big * self.lid)
                 if mood == "sad" and s == 1:                  # слезинка
                     f = (t * 0.8) % 1
                     p.setBrush(QColor(120, 180, 255, int(200 * (1 - f))))
@@ -536,11 +570,11 @@ class Blob(QWidget):
             p.setPen(QColor(110, 110, 140, 200))
             for k in range(3):
                 ph = ((t * 0.4) + k / 3) % 1
-                p.setFont(QFont("Segoe UI", max(6, int(R * (0.14 + 0.1 * ph))), QFont.Weight.Bold))
+                p.setFont(QFont(theme.FONT_FAMILY, max(6, int(R * (0.14 + 0.1 * ph))), QFont.Weight.Bold))
                 p.drawText(QPointF(cx + R * 0.6 + ph * R * 0.4, cy - R * 0.7 - ph * R * 0.7), "z")
         elif mood == "surprised":
             p.setPen(QColor(230, 90, 60))
-            p.setFont(QFont("Segoe UI", max(8, int(R * 0.45)), QFont.Weight.Bold))
+            p.setFont(QFont(theme.FONT_FAMILY, max(8, int(R * 0.45)), QFont.Weight.Bold))
             p.drawText(QPointF(cx - R * 0.12, cy - R * 1.0), "!")
         if mood == "proud":                                 # гордость: искорки вокруг головы
             p.setFont(self._font("Segoe UI Symbol", max(8, int(R * 0.22))))

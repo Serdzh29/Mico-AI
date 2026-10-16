@@ -1,3 +1,4 @@
+import datetime
 import os as _os, sys as _sys, time, datetime
 ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 _sys.path.insert(0, ROOT)
@@ -28,9 +29,12 @@ def test_recurring_rule_roundtrip_and_next_occurrence():
 
 def test_windows_comparison_uses_only_verified_data():
     data = WC.load()
-    text = WC.compare("24h2", "25h2", data)
+    before_eol = datetime.date(2026, 10, 12)              # фиксируем дату: 24H2 заканчивает поддержку 13.10.2026
+    text = WC.compare("24h2", "25h2", data, today=before_eol)
     assert "24H2" in text and "25H2" in text and "Источники" in text
-    unknown = WC.compare("99h9", "25h2", data)
+    after_eol = WC.compare("24h2", "25h2", data, today=datetime.date(2026, 10, 14))
+    assert "не поддерживается" in after_eol                 # после конца поддержки сравнивать не берёмся
+    unknown = WC.compare("99h9", "25h2", data, today=before_eol)
     assert "Не знаю сборку или версию" in unknown
 
 

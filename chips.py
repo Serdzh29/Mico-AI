@@ -100,11 +100,13 @@ def _weight(usage):
 
 def pick(cfg, rng=random):
     """Какие кнопки показать сейчас (список Chip)."""
+    count = max(0, min(MAX_CHIPS, int(cfg.get("chips_count", MAX_CHIPS))))
+    if count == 0:                            # 0 — кнопки полностью убраны (настройка «не показывать»)
+        return []
     if cfg.get("chips_mode", "auto") == "manual":
         pinned = [BY_ID[i] for i in cfg.get("chips_pinned", []) if i in BY_ID]
         if pinned:
             return pinned[:MAX_CHIPS]          # пустой ручной набор — временно показываем авто-набор
-    count = max(1, min(MAX_CHIPS, int(cfg.get("chips_count", MAX_CHIPS))))
     usage = cfg.get("chip_usage", {})
     pool = sorted(CATALOG, key=lambda c: -usage.get(c.id, 0))[:18]
     weights = {c.id: _weight(usage.get(c.id, 0)) for c in pool}

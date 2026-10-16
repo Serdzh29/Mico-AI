@@ -93,7 +93,7 @@ def html_capabilities(cfg=None):
     for cat, items in _categories(cfg):
         parts.append(f"<br><b>{cat}</b>")
         parts += [f"<br>&nbsp;&nbsp;• {link(p)} — {what}{beta_mark(p)}" for p, what in items]
-    parts.append("<br><br>Ещё: свои фразы-команды, кнопки под чатом и горячие клавиши (Ctrl+Alt+M, Ctrl+Alt+T).")
+    parts.append("<br><br>Ещё: свои фразы-команды, кнопки под чатом и горячую клавишу (Ctrl+Alt+M).")
     return "".join(parts)
 
 

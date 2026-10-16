@@ -71,3 +71,19 @@ def snippet(text, width=110):
 def format_hits(hits, now_fmt):
     """hits: [(ts, text)] — строки для ответа."""
     return "\n".join(f"{now_fmt(ts)} — {snippet(text)}" for ts, text in hits)
+
+
+# ----- помощник по буферу обмена (WI): текст ошибки — предложить объяснить -----
+ERROR_HINT = re.compile(r"traceback|exception|error:|errno|hresult|0x[0-9a-f]{6,8}|failed|access is denied|"
+                        r"ошибк|исключени|не удалось|отказано в доступе|нет доступа|сбой|не найден|"
+                        r"not found|fatal|warning:", re.I)
+
+
+def looks_like_error(text):
+    """Похоже ли скопированное на текст ошибки. Секреты — никогда (даже если похоже на ошибку)."""
+    t = (text or "").strip()
+    if not (12 <= len(t) <= 3000):
+        return False
+    if looks_secret(t):
+        return False
+    return bool(ERROR_HINT.search(t))

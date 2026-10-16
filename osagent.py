@@ -57,6 +57,15 @@ def check_script(script):
     return None
 
 
+# Файлы, которые при открытии ЗАПУСКАЮТСЯ. Модель через open_file их не открывает: только вы сами.
+EXEC_EXT = (".exe", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jse", ".wsf", ".msi", ".lnk", ".scr", ".com",
+            ".reg", ".hta", ".jar", ".appref-ms", ".url", ".cpl", ".msc")
+
+
+def is_executable(path):
+    return str(path).lower().rstrip(" .").endswith(EXEC_EXT)
+
+
 def validate(obj):
     """Проверяет вызов из ответа модели и приводит аргументы к нужным типам. Возвращает (имя, аргументы)."""
     name = obj.get("action")
@@ -70,6 +79,8 @@ def validate(obj):
         if key not in args:
             raise ValueError(f"не хватает параметра «{key}»")
         v = args[key]
+        if name == "open_file" and key == "path" and is_executable(v):
+            raise ValueError("программы и скрипты этим действием не запускаю — запусти их сам")
         if typ is int:
             if isinstance(v, bool):
                 raise ValueError(f"«{key}» должно быть числом")
@@ -158,6 +169,8 @@ def execute(name, args, notify=lambda t: None):
         return r.text if r else f"Не нашёл программу «{args['name']}»."
     if name == "open_file":
         import os
+        if is_executable(args["path"]):
+            return "Программы и скрипты этим действием не запускаю — запусти их сам."
         if not os.path.exists(args["path"]):
             return f"Не нашёл «{args['path']}»."
         os.startfile(args["path"])

@@ -74,6 +74,7 @@ def make_dialog():
     f.se = Ctl(False); f.se.currentText = lambda: "Яндекс"
     f.auto = Ctl(True)
     f._phrases = []
+    f.assist = Ctl(False); f.assist.currentData = lambda: "classic"
     f._save_chips = lambda: None
     f._menu_ids = lambda: []
     f._greet_ids = lambda: []

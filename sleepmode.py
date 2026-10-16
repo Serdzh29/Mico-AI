@@ -8,6 +8,7 @@ DEFAULT_MINUTES = 3
 DEFAULT_CORNER = "br"
 # код угла: первая буква — t (верх) / b (низ), вторая — l (лево) / r (право)
 CORNERS = {"tl": "Левый верхний", "tr": "Правый верхний", "bl": "Левый нижний", "br": "Правый нижний"}
+SPOT = "bc"                # внизу по центру — место Mico в режиме Windows Intelligence (в списке углов его нет)
 
 
 def limit_seconds(minutes):
@@ -30,9 +31,11 @@ def corner_spot(avail, size, corner=DEFAULT_CORNER, margin=CORNER_MARGIN):
     """Левый верхний угол квадрата size в выбранном углу рабочей области.
     avail — (left, top, right, bottom) с правой и нижней границами, не входящими в область (как в Qt +1).
     Неизвестный угол — правый нижний."""
+    left, top, right, bottom = avail
+    if corner == SPOT:
+        return int(left + (right - left - size) / 2), int(bottom - size - margin)
     if corner not in CORNERS:
         corner = DEFAULT_CORNER
-    left, top, right, bottom = avail
     x = left + margin if corner[1] == "l" else right - size - margin
     y = top + margin if corner[0] == "t" else bottom - size - margin
     return int(x), int(y)
@@ -43,7 +46,7 @@ def home_corner(asleep, placement, sleep_corner):
     None — Mico стоит там, где его поставил пользователь (мышкой)."""
     if asleep:
         return sleep_corner if sleep_corner in CORNERS else DEFAULT_CORNER
-    return placement if placement in CORNERS else None
+    return placement if placement in CORNERS or placement == SPOT else None
 
 
 def ease(current, target, dt, rate=2.5):
