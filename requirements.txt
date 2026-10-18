@@ -1,0 +1,12 @@
+PyQt6>=6.6
+mss>=9.0
+Pillow>=10.0
+pywin32>=306
+psutil>=5.9
+cryptography>=42.0
+requests>=2.31
+# точная громкость
+pycaw>=20240210
+comtypes>=1.4
+# чтение PDF (чистый Python, без системных библиотек)
+pypdf>=4.0

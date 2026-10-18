@@ -1,0 +1,29 @@
+# Сборка и окружение
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.spec
+*.exe
+.pytest_cache/
+*.egg-info/
+
+# Данные и журналы пользователя (в проекте их быть не должно)
+config.json
+*.log
+*.db
+key.bin
+models/
+*.zip.part
+start.log
+launch.log
+mico.pid
+mico_task.xml
+
+# Редакторы и система
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
