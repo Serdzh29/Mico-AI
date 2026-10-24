@@ -1,0 +1,28 @@
+name: Windows smoke
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Зависимости
+        run: python -m pip install -r requirements.txt
+      - name: Проверки без Windows
+        run: python tests/run_all.py
+      - name: Дымовой тест Qt
+        run: python tests/smoke_qt.py
+      - name: Сохранить скриншоты
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-output
+          path: smoke_out/
+          if-no-files-found: warn
