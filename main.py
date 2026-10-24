@@ -1,6 +1,14 @@
 """Mico AI — локальный ИИ-компаньон для Windows 11. Запуск: python main.py"""
 import sys as _sys, os as _os, traceback as _tb
 
+# В сборке --noconsole (Mico.exe) стандартные потоки равны None. Библиотеки (tqdm при скачивании моделей,
+# torch, Hugging Face) пишут туда прогресс и падают с «NoneType object has no attribute write».
+# Подменяем на пустой поток до любых других импортов.
+if _sys.stdout is None:
+    _sys.stdout = open(_os.devnull, "w", encoding="utf-8")
+if _sys.stderr is None:
+    _sys.stderr = open(_os.devnull, "w", encoding="utf-8")
+
 
 def _log_crash(exc_type, exc, tb):
     """Любая необработанная ошибка пишется в %APPDATA%\\Mico\\crash.log — даже если окно не открылось."""
@@ -22,6 +30,23 @@ def _mico_dir():
     folder = _os.path.join(_os.environ.get("APPDATA", _os.path.expanduser("~")), "Mico")
     _os.makedirs(folder, exist_ok=True)
     return folder
+
+
+def _trace(msg):
+    """Журнал запуска: пишется сразу при старте процесса, ещё до интерфейса.
+    Так видно, стартует ли Mico при входе в Windows и на каком этапе останавливается. Файл не растёт бесконечно."""
+    try:
+        import time as _t
+        path = _os.path.join(_mico_dir(), "launch_trace.log")
+        if _os.path.exists(path) and _os.path.getsize(path) > 200_000:
+            _os.replace(path, path + ".old")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"{_t.strftime('%d.%m.%Y %H:%M:%S')} pid {_os.getpid()} argv={_sys.argv[1:]} — {msg}\n")
+    except Exception:
+        pass
+
+
+_trace("процесс начал работу")
 
 
 def _stage(name):
@@ -46,36 +71,43 @@ try:
 except Exception:
     pass
 _stage("модуль main загружен")
-import html, json, os, subprocess, sys, threading, time, webbrowser
+import base64, html, json, os, subprocess, sys, threading, time, webbrowser
 from types import SimpleNamespace
 from urllib.parse import unquote
-from PyQt6.QtCore import QRectF, QEasingCurve, QEvent, QObject, QPropertyAnimation, Qt, QTime, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QAction, QColor, QGuiApplication, QIcon, QImage
-from PyQt6.QtWidgets import (QProgressBar, QAbstractButton, QAbstractButton, QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QSlider, QSpinBox, QTabWidget, QTextBrowser, QTimeEdit, QToolButton, QVBoxLayout, QWidget)
+from switch_ui import ClickLabel, Switch, WrapCheck      # переключатели — общие с установщиком
+from switch_ui import RoundSlider                       # круглые ползунки — тоже общие с установщиком
+import settings_look                                    # оформление окна настроек (карточки, акцент Mico AI)
+from PyQt6.QtCore import QPoint, QRectF, QEasingCurve, QObject, QPropertyAnimation, QSize, Qt, QTime, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QPainter, QColor, QAction, QColor, QGuiApplication, QIcon, QImage, QTextDocument
+from PyQt6.QtWidgets import (QProgressBar, QAbstractButton, QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QSlider, QSpinBox, QTextBrowser, QTimeEdit, QToolButton, QVBoxLayout, QWidget)
 import psutil
-import actions, autostart, errwatch, i18n, sidetabs, subpages, intel, intel_ui, phrase, settings_info, sleep_island, clipbuf, schedule, menu_items, features, capabilities, chips, commands, custom, greeting, hotkeys, breaks, reminders, sleepmode, theme, updatecheck, version, windows_info
+import uiicons
+import chat_look                                        # новый вид текстового чата
+import filereader                                       # файлы, которые прикрепляют к чату (скрепка)
+import actions, autostart, errwatch, i18n, sidetabs, voice_settings, subpages, intel, intel_ui, phrase, settings_info, clipbuf, schedule, menu_items, features, capabilities, chips, commands, custom, greeting, hotkeys, breaks, reminders, theme, updatecheck, version, memview
 import winctl as W
+import ollama_ctl
 from actions import Reply
 from blob import Blob
+import brain as brain_mod                                       # модуль целиком: load_cfg выбирает модель и режим
 from brain import SUGGEST_TEXT, SUGGEST_VISION, VISION_MODEL, Brain, is_vision_model, list_models, pull_model, delete_model as delete_ollama_model
 from emotions import detect_emotion
 from follow import WindowWatcher
 from storage import APPDIR, Store
 from tracker import Tracker, idle_seconds
 
-SEARCH_ENGINES = {"Google": "https://www.google.com/search?q=", "Яндекс": "https://yandex.ru/search/?text=",
-                  "Bing": "https://www.bing.com/search?q=", "DuckDuckGo": "https://duckduckgo.com/?q="}
 
 DEFAULTS = {
-    "color": "#FFCFA3", "scale": 1.0, "opacity": 1.0, "chat_opacity": 1.0,
-    "text_model": "qwen2.5:7b", "vision_model": "qwen2.5vl:7b", "retention_days": 30,
-    "greet_on_start": True, "autostart": False, "language": "ru",
+    "user_name": "",                  # как зовать пользователя (аватар, приветствие)
+    "user_about": "",                 # что Mico AI должен знать о пользователе
+    "color": "#FFCFA3", "scale": 1.0, "opacity": 1.0,
+    "text_model": "qwen2.5:7b", "vision_model": "qwen2.5vl:7b", "retention_days": 30, "llm_backend": "ollama",
+    "greet_on_start": True, "autostart": False, "language": "en", "weather_on_start": True,
     "theme": "auto",                      # auto — как в Windows | light | dark
     "assist_style": "classic",            # classic — Mico AI в углу | intelligence — внизу по центру, с подсветкой экрана
     "placement": "manual",                # manual — стоит, где поставил мышкой | tl/tr/bl/br — всегда в этом углу экрана
     "chips_mode": "auto", "chips_count": 6, "chips_pinned": [], "chip_usage": {},   # кнопки под чатом
     "chips_hide_on_send": True,
-    "wave_opacity": 85,
     "chat_linked": True, "chat_scale": 1.0, "chat_ratio": 1.0,   # чат меняется вместе с Mico AI или отдельным ползунком
     "chat_outline": True,                 # обводка вокруг окна чата
     "button_glow": True,                  # подсветка кнопок акцентным цветом при наведении (чат, быстрые действия)
@@ -84,8 +116,13 @@ DEFAULTS = {
     "weather_on": True, "memory_on": True,
     "hotkey_chat": "f8",           # глобальная клавиша: F8 открывает чат из любого окна (нужен перезапуск)
     "hotkey_screen": "ctrl+alt+s", "hotkey_window": "ctrl+alt+h",   # только для Mico AI (нужен перезапуск)
+    "hotkey_voice": "ctrl+alt+v",       # голос: нажми — говори, нажми ещё раз — отправлю (нужен перезапуск)
+    "voice_wake": False,                  # голосовой чат по слову «мико!» (микрофон слушает, звук не сохраняется; по умолчанию выключено)
+    "voice_mood": True, "voice_speed": 1.0, "voice_expr": 60, "voice_pause": 1.0, "voice_volume": 100,   # вкладка «Голос»
+    "voice_wake_words": "мико, mico", "voice_wake_sens": 1.0, "voice_end_ms": 1000, "voice_mic": "",
+    "voice_on": False, "voice_name": "irina",   # озвучка ответов (по умолчанию выключена, модель качается при включении)
     "wi_thickness": intel.THICK_DEFAULT, "wi_waves": True, "wi_glow_style": intel.GLOW_DEFAULT,
-    "anim_sleep_fps": 60,                 # частота анимации Mico AI во сне, кадров в секунду (выбирается в настройках)
+    "anim_sleep_fps": 20,                 # частота анимации Mico AI во сне, кадров в секунду (выбирается в настройках); 20 — экономно, движение плавное
     "wi_wave_height": intel.WAVE_HEIGHT_DEFAULT, "wi_edge_width": intel.EDGE_W_DEFAULT,
     "wi_draft": "",                         # черновик из чата Mico AI — восстанавливается при следующем открытии            # толщина полоски и волны при ответе (Mico AI)
     "wi_wave_source": "mico", "wi_wave_custom": intel.WAVE_DEFAULT_CUSTOM,   # откуда цвет волн: Mico AI, действие, свой, набор
@@ -101,11 +138,17 @@ DEFAULTS = {
     "greet_items": ["recap", "weather"],           # что показывать при входе (до 3), см. greeting.py
     "sleep_after_min": 3,                          # через сколько минут без внимания Mico AI засыпает (0 — не засыпать)
     "sleep_corner": "br",                          # угол экрана, где Mico AI спит (tl/tr/bl/br)
-    "search_url": SEARCH_ENGINES["Google"],
     "block_processes": ["keepass", "bitwarden", "1password", "lastpass", "dashlane"],
     "block_titles": ["inprivate", "incognito", "инкогнито", "private browsing", "пароль", "password", "банк", "bank"],
 }
 CFG_PATH = os.path.join(APPDIR, "config.json")
+
+
+def brain_ram_gb():
+    try:
+        return psutil.virtual_memory().total / (1024 ** 3)
+    except Exception:
+        return 8.0
 
 
 def load_cfg():
@@ -113,6 +156,19 @@ def load_cfg():
     if os.path.exists(CFG_PATH):
         with open(CFG_PATH, encoding="utf-8") as f:
             cfg.update(json.load(f))
+    else:
+        import local_llm, model_catalog
+        if local_llm.available():                             # новая установка: встроенная модель, если библиотека есть
+            cfg["llm_backend"] = "builtin"
+            cfg["text_model"] = model_catalog.recommend(brain_ram_gb()).get("id")
+        else:
+            cfg["text_model"] = brain_mod.recommended_text_model()   # иначе — Ollama с моделью под объём памяти
+    if cfg.get("llm_backend") == "builtin":               # тяжёлую старую модель заменяем лёгкой (скачать — в настройках)
+        import model_catalog
+        entry = model_catalog.by_id(cfg.get("text_model") or "")
+        if entry is not None and entry.get("legacy"):
+            cfg["text_model"] = model_catalog.recommend(brain_ram_gb())["id"]
+    brain_mod.set_backend(cfg.get("llm_backend", "ollama"))
     if cfg.get("hotkey_chat") == "ctrl+alt+m":  # старое значение по умолчанию -> одна клавиша F8
         cfg["hotkey_chat"] = "f8"
     cfg["placement"], cfg["sleep_corner"] = "manual", "br"   # положение и угол сна — не настраиваются
@@ -160,8 +216,8 @@ def _alive_instance():
 # =============================== Диалоги ===============================
 def _confirm_wipe(store):
     """Историю удаляем только после явного «Удалить»: отменить это нельзя, поэтому по умолчанию — «Отмена»."""
-    b = QMessageBox(QMessageBox.Icon.Warning, "Удалить всю историю?",
-                    "Вся история Mico AI будет удалена без возможности восстановить. Продолжить?")
+    b = QMessageBox(QMessageBox.Icon.Warning, i18n.t("Удалить всю историю?"),
+                    i18n.t("Вся история Mico AI будет удалена без возможности восстановить. Продолжить?"))
     yes = b.addButton("Удалить", QMessageBox.ButtonRole.DestructiveRole)
     no = b.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
     b.setDefaultButton(no)
@@ -182,15 +238,6 @@ def _box(icon, title, text, yes="OK", no=None):
 
 
 # =============================== Чат под Mico AI ===============================
-class ChatLog(QTextBrowser):
-    """Текст чата. Если человек сам крутит колёсиком, плавная прокрутка Mico AI останавливается."""
-    user_scrolled = pyqtSignal()
-
-    def wheelEvent(self, e):
-        self.user_scrolled.emit()
-        super().wheelEvent(e)
-
-
 BREAK_MARK = "__break__"             # метка: это напоминание о перерыве, а не наблюдение за экраном
 
 
@@ -203,6 +250,9 @@ class Panel(QWidget):
     answer_text = pyqtSignal(str)     # текст ответа (для строки над Mico AI в режиме Windows Intelligence)
     user_sent = pyqtSignal(str)       # вопрос ушёл Mico AI (в чат Windows Intelligence)
     mico_said = pyqtSignal(str)       # Mico AI написал текст в обычный чат (для чата Windows Intelligence)
+    settings_requested = pyqtSignal() # «Настройки Mico AI» внизу бокового меню чата
+    profile_changed = pyqtSignal()    # имя или «о себе» поменяли (AIChat обновит приветствие и аватар)
+    title_ready = pyqtSignal()        # Mico придумал название чата — боковое меню обновит список
 
     def __init__(self, brain, blob, cfg):
         super().__init__()
@@ -210,31 +260,155 @@ class Panel(QWidget):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint |
                             Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        card = QFrame(self)
+        card = self.card = QFrame(self)
         card.setObjectName("card")
         outer = QVBoxLayout(self)
         outer.setContentsMargins(6, 6, 6, 6)
         outer.addWidget(card)
-        lay = QVBoxLayout(card)
-        self.log = ChatLog()
-        self.log.setOpenLinks(False)
-        self.log.anchorClicked.connect(self.on_link)
-        self.log.user_scrolled.connect(self._stop_follow)
-        lay.addWidget(self.log)
-        self.grid = QGridLayout()
-        self.chips_box = QWidget()                 # ряд кнопок целиком — его можно скрыть или убрать
-        self.chips_box.setLayout(self.grid)
+        body = QHBoxLayout(card)                  # слева боковое меню (всегда открыто), справа — чат
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        lay = QVBoxLayout()
+        lay.setContentsMargins(14, 12, 14, 12)
+        lay.setSpacing(8)
+        body.addLayout(lay, 1)
+        self._file = None                         # прикреплённый файл (скрепка), уйдёт с следующим сообщением
+        self._titled = set()                      # чаты, которым Mico уже придумал название
+        self._store = getattr(brain, "store", None)
+        self.conv_id = None                       # открытый чат (None — новый, ещё не начат)
+        self._rows = {}                           # id реплики в журнале → её пузырь (для перехода из поиска)
+        self._pending_rid = None                  # id ответа Mico AI, который сейчас печатается
+        self._reveal = None                       # ответ, который сейчас печатается по буквам
+        self._reveal_timer = QTimer(self)
+        self._reveal_timer.timeout.connect(self._reveal_tick)
+        self._follow_on = True                    # следить за лентой: выключается, когда человек крутит сам
+        self._scroll_anim = None
+        muted = chat_look.PALETTE[bool(theme.is_dark(cfg))]["muted"]
+        # шапка: три полоски (недавние чаты), поиск, закрыть; ниже — «Текущий чат» белым
+        self.head_bar = QFrame()
+        self.head_bar.setObjectName("chatHeadBar")
+        hb = QVBoxLayout(self.head_bar)
+        hb.setContentsMargins(10, 8, 10, 8)
+        hb.setSpacing(4)
+        top = QHBoxLayout()
+        top.setSpacing(6)
+        self.menu_btn = self._icon_btn(chat_look.menu_icon(cfg["color"], 18))
+        self.menu_btn.setToolTip(i18n.t("Недавние чаты"))
+        self.menu_btn.clicked.connect(lambda: None)
+        self.menu_btn.hide()                      # меню теперь всегда открыто — кнопка-полоски не нужна
+        self.search = QLineEdit()
+        self.search.setObjectName("chatSearch")
+        self.search.setPlaceholderText(i18n.t("Поиск по сообщениям"))
+        self.search.setToolTip(i18n.t("Поиск по сообщениям в этом чате"))
+        self.search.setClearButtonEnabled(True)
+        self.search.addAction(uiicons.icon("search", chat_look.icon_ink(theme.is_dark(cfg)), 16), QLineEdit.ActionPosition.LeadingPosition)
+        self.search.textChanged.connect(self._search_changed)
+        close_b = self._icon_btn(chat_look.close_icon(chat_look.icon_ink(theme.is_dark(cfg)), 16))
+        close_b.setToolTip(i18n.t("Закрыть"))
+        close_b.clicked.connect(self.hide_smooth)
+        top.addWidget(self.menu_btn)
+        top.addWidget(self.search, 1)
+        top.addWidget(close_b)
+        hb.addLayout(top)
+        self.head = QLabel(i18n.t("Текущий чат"))
+        self.head.setObjectName("chatHead")
+        hb.addWidget(self.head)
+        lay.addWidget(self.head_bar)
+        # лента сообщений: сверху вниз; внизу — «печатает» и пустое место
+        self.msg_host = QWidget()
+        self.msg_host.setObjectName("msgHost")
+        self.msgs = QVBoxLayout(self.msg_host)
+        self.msgs.setContentsMargins(2, 4, 6, 4)
+        self.msgs.setSpacing(10)
+        self.typing = chat_look.TypingRow(cfg["color"], muted)
+        self.typing.hide()
+        self.greeting = chat_look.Greeting()          # пустой чат: «<имя>, приступим»
+        self.msgs.addWidget(self.greeting)
+        self.msgs.addWidget(self.typing)
+        self.msgs.addStretch(1)
+        self.scroll = chat_look.ChatScroll()
+        self.scroll.setObjectName("msgScroll")
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setWidget(self.msg_host)
+        self.scroll.user_scrolled.connect(self._stop_follow)
+        lay.addWidget(self.scroll, 1)
+        self.chips_inner = QWidget()               # полоса подсказок: одна строка, листается вбок
+        self.grid = QHBoxLayout(self.chips_inner)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setSpacing(6)
+        self.chips_box = QScrollArea()
+        self.chips_box.setWidgetResizable(True)
+        self.chips_box.setFrameShape(QFrame.Shape.NoFrame)
+        self.chips_box.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.chips_box.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.chips_box.setFixedHeight(36)
+        self.chips_box.setWidget(self.chips_inner)
+        self.chips_inner.setObjectName("chipsInner")
+        self.chips_box.horizontalScrollBar().setStyleSheet(
+            "QScrollBar:horizontal { height: 4px; background: transparent; margin: 0; }"
+            "QScrollBar::handle:horizontal { background: rgba(128,128,128,0.45); border-radius: 2px; min-width: 24px; }"
+            "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }")
+        self.chips_box.viewport().setAutoFillBackground(False)
+        self.chips_inner.setAutoFillBackground(False)
         lay.addWidget(self.chips_box)
-        self.last_pair = None                     # последний вопрос и ответ — для «короче» и «подробнее»
-        row = QHBoxLayout()
+        self.last_pair = None
+        # поле ввода: скруглённая строка и круглая кнопка отправки
+        box = QFrame()
+        box.setObjectName("inputBox")
+        bh = QHBoxLayout(box)
+        bh.setContentsMargins(12, 4, 6, 4)
+        bh.setSpacing(6)
         self.inp = ChatInput()
-        self.inp.setPlaceholderText("Напиши Mico AI…")
+        self.inp.setObjectName("chatInput")
+        self.inp.setPlaceholderText(i18n.t("Напиши Mico AI…"))
         self.inp.focused.connect(self._on_input_focus)
-        send_btn = QPushButton("➤")
-        send_btn.setFixedWidth(36)
-        row.addWidget(self.inp)
-        row.addWidget(send_btn)
-        lay.addLayout(row)
+        send_btn = QPushButton()
+        send_btn.setObjectName("send")
+        send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        send_btn.setIcon(uiicons.send_icon("#1a1a1a"))
+        send_btn.setIconSize(QSize(18, 18))
+        self.clip_btn = self._icon_btn(chat_look.clip_icon(chat_look.icon_ink(theme.is_dark(cfg)), 18))   # скрепка: прикрепить файл
+        self.clip_btn.setToolTip(i18n.t("Прикрепить файл"))
+        self.clip_btn.clicked.connect(self._pick_file)
+        bh.addWidget(self.clip_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        bh.addWidget(self.inp, 1)
+        bh.addWidget(send_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        avatar_row = QHBoxLayout()                       # аватар слева внизу — открывает «о себе»
+        avatar_row.setSpacing(8)
+        self.avatar = chat_look.AvatarButton()
+        self.avatar.set_accent(cfg["color"])
+        self.avatar.clicked.connect(self.edit_profile)
+        avatar_row.addWidget(self.avatar, 0, Qt.AlignmentFlag.AlignBottom)
+        avatar_row.addWidget(box, 1)
+        self.file_chip = QPushButton()                       # имя прикреплённого файла; нажал — убрать
+        self.file_chip.setObjectName("chip")
+        self.file_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.file_chip.setToolTip(i18n.t("Убрать файл"))
+        self.file_chip.clicked.connect(self._clear_file)
+        self.file_chip.hide()
+        lay.addWidget(self.file_chip, 0, Qt.AlignmentFlag.AlignLeft)
+        lay.addLayout(avatar_row)
+        self._refresh_profile()
+        # результаты поиска — поверх ленты
+        self.results = QListWidget(card)
+        self.results.setObjectName("results")
+        self.results.setWordWrap(True)
+        self.results.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.results.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.results.itemClicked.connect(self._open_result)
+        self.results.hide()
+        # боковое меню: выезжает слева поверх ленты
+        self.side = chat_look.Sidebar(cfg["color"], card, dark=theme.is_dark(cfg))
+        self.side.open_chat.connect(lambda cid: self.open_chat(cid))
+        self.side.new_chat.connect(self.new_chat)
+        body.insertWidget(0, self.side)               # меню слева, всегда открыто
+        self.side.setFixedWidth(206)
+        self.side.profile.connect(self.edit_profile)
+        self.title_ready.connect(self._refresh_side)
+        self._refresh_side()
+        self._refresh_profile()
         self.inp.returnPressed.connect(lambda: self.submit(self.inp.text()))
         send_btn.clicked.connect(lambda: self.submit(self.inp.text()))
         self.inp.textChanged.connect(self._typed)
@@ -245,7 +419,6 @@ class Panel(QWidget):
         self.reminder.connect(self.on_reminder)
         self.initiative.connect(self.on_initiative)
         self._anim = None
-        self._scroll_anim = None                 # плавная прокрутка чата
         self._chips_hidden = False               # кнопки скрыты после отправки запроса
         self.refresh_chips()
         self.apply_size()
@@ -262,13 +435,14 @@ class Panel(QWidget):
             it = self.grid.takeAt(0)
             if it.widget():
                 it.widget().deleteLater()
-        for i, c in enumerate(chips.pick(self.cfg)):
-            text = c.label if len(c.label) <= 20 else c.label[:19] + "…"     # полное имя — в подсказке
-            b = QPushButton(text)
+        for c in chips.pick(self.cfg):
+            b = QPushButton(c.label)                 # полная подпись: в узком чате полоса листается, а не обрезает слова
             b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setFixedHeight(26)
+            b.setObjectName("chip")
             b.setToolTip(f"{c.label} — «{c.phrase.strip()}»")
             b.clicked.connect(lambda _, c=c: self.submit(c.phrase) if c.send else self.prefill(c.phrase))
-            self.grid.addWidget(b, i // 3, i % 3)
+            self.grid.addWidget(b)
         self.chips_box.setVisible(bool(chips.pick(self.cfg)) and not self._chips_hidden)
 
     def _target_opacity(self):
@@ -301,8 +475,11 @@ class Panel(QWidget):
 
     def apply_size(self):
         k = self.chat_factor()
-        self.setFixedSize(round(360 * k), round(430 * k))
+        self.setFixedSize(round(CHAT_W * k), round(CHAT_H * k))     # стандартный размер чата (меньше, чем раньше)
         self.theme()
+        wc = getattr(self.intel, "aichat", None)          # чат режима Mico AI подчиняется тому же размеру
+        if wc is not None:
+            wc.relayout()
         if self.isVisible():
             self.keep_on_screen()                   # не переставляем чат заново: он не должен прыгать при настройках
 
@@ -318,6 +495,7 @@ class Panel(QWidget):
     def _typed(self, _):
         if self.queue:                                 # человек начал печатать — не дочитываем ответ
             self.queue.clear()
+            self._finish_reveal()
             self.blob.talking = False
         self.blob.notify_typing()                   # Mico AI смотрит на строку ввода и интересуется
         self.blob.set_mood("curious", 3)
@@ -326,8 +504,8 @@ class Panel(QWidget):
     def theme(self):
         dark = theme.is_dark(self.cfg)
         self.setStyleSheet(theme.panel_qss(self.cfg["color"], dark, self.cfg.get("chat_outline", True),
-                                           self.chat_factor(), glow=intel.glow_on(self.cfg)))
-        self.log.document().setDefaultStyleSheet(theme.LINK_DARK if dark else theme.LINK_LIGHT)
+                                           self.chat_factor(), glow=intel.glow_on(self.cfg))
+                           + chat_look.qss(dark, self.cfg["color"]))
 
     # ----- позиция и показ -----
     def reposition(self):
@@ -344,7 +522,7 @@ class Panel(QWidget):
 
     def show_near(self, activate=True):
         if self.intel and self.intel.on():          # в Windows Intelligence открывается свой чат, не этот
-            self.intel.show_wichat(activate)
+            self.intel.show_aichat(activate)
             return
         self.blob.touch()
         if self.blob.asleep:                        # чат открывают — Mico AI просыпается, но не повторяет «woke»
@@ -366,7 +544,7 @@ class Panel(QWidget):
 
     def toggle(self):
         if self.intel and self.intel.on():
-            self.intel.toggle_wichat()
+            self.intel.toggle_aichat()
             return
         self.hide_smooth() if self.isVisible() else self.show_near()
 
@@ -388,12 +566,20 @@ class Panel(QWidget):
         if self.cfg.get("chips_hide_on_send", True):      # кнопки скрыты, пока не нажмут в поле ввода
             self._chips_hidden = True
             self.chips_box.setVisible(False)
+        f = self._file
+        self._clear_file()
+        shown = f"📎 {f['name']}\n{q}" if f else q
         self.last_pair = {"q": q, "a": ""}
         self.inp.clear()
-        self.log.append(f"<p align='right'><b>Вы:</b> {html.escape(q)}</p>")
+        self._ensure_conv(q)
+        self._add_row("user", html.escape(shown).replace("\n", "<br>"))
+        self._save_msg("user", shown)
+        self._follow_on = True
+        self._scroll_bottom(animate=True)
         self.user_sent.emit(q)
         self.busy = True
         self.busy_changed.emit(True)
+        self.typing.show_typing(True)                      # Mico AI печатает: точки в пузыре
         m = detect_emotion(q)                       # Mico AI реагирует на настроение сообщения
         if m and m != "curious":
             self.blob.set_mood(m, 1.2)
@@ -403,7 +589,13 @@ class Panel(QWidget):
         if self.brain.is_screenshot(q):
             self.blob.hide()
             self.hide()
-        self._run(q)
+        if f is not None and f["image"]:
+            self._run_image(q, f)                       # картинка: отвечает модель, которая видит картинки
+        elif f is not None:
+            self._run(intel.FILE_CHAT_PROMPT.format(name=f["name"], text=filereader.excerpt(f["text"], q, 6000),
+                                                    question=q))
+        else:
+            self._run(q)
 
     def _run(self, q):
         shot = self.brain.is_screenshot(q)
@@ -429,32 +621,40 @@ class Panel(QWidget):
 
     def on_answer(self, r):
         if r is None:                                           # модель ничего не вернула — не молчим
-            r = Reply("Ответа нет. Попробуй сказать иначе.", "worried")
+            r = Reply(i18n.t("Ответа нет. Попробуй сказать иначе."), "worried")
         self.busy = False
         self.busy_changed.emit(False)
+        self.typing.show_typing(False)
         if not r.text and not r.html and not r.image:
-            r = Reply("Ответа нет. Попробуй сказать иначе.", "worried")
+            r = Reply(i18n.t("Ответа нет. Попробуй сказать иначе."), "worried")
         plain = r.text or intel.plain_from_html(r.html) if r.html else r.text
         if plain:
             self.answer_text.emit(plain)                        # Mico AI: строка над Mico AI, чат — для длинного
         self.blob.touch()
         if self.last_pair is not None:
-            self.last_pair["a"] = r.text or "(ответ в виде карточек или списка)"
+            self.last_pair["a"] = r.text or i18n.t("(ответ в виде карточек или списка)")
         if not self.blob.isVisible():
             self.blob.show()
             self.show_near()
         self.blob.set_mood(r.mood, 6)
         if r.mood in ("surprised", "happy", "love", "laugh"):
             self.blob.jump()
-        if r.image:
+        if r.image and r.copy_image:
             QGuiApplication.clipboard().setImage(QImage(r.image))
+        stored = (plain or "") if plain else (i18n.t("(картинка)") if r.image else "")
+        self._pending_rid = self._save_msg("mico", stored)  # в журнал чата — сразу, даже если печать ещё идёт
+        if self.conv_id is not None:
+            self.brain.after_turn(self.conv_id)             # иногда обновляем сводку, чтобы помнить суть
+            if self.conv_id not in self._titled and self.last_pair is not None:
+                self._titled.add(self.conv_id)              # название — один раз, по первому обмену
+                self._make_title(self.conv_id, self.last_pair["q"], stored)
         if r.html:
             self.queue.append(("html", "<b>Mico AI:</b><br>" + r.html))
             self.queue.append(("wi", plain))                    # тот же ответ — текстом в чат Mico AI
         else:
             self.queue.append(("text", r.text))
         if r.image:
-            self.queue.append(("html", f'<img src="{QUrl.fromLocalFile(r.image).toString()}" width="300">'))
+            self.queue.append(("img", r.image))
         self._pump()
 
     def on_initiative(self, payload):
@@ -504,88 +704,315 @@ class Panel(QWidget):
         except Exception:
             pass
 
-    # ----- «печатающий» ответ: Mico AI говорит ртом -----
+    # ----- лента сообщений и печать ответа: Mico AI говорит ртом -----
+    def _pick_file(self):
+        """Скрепка: выбираем файл, с которым будет работать Mico. Он уйдёт с следующим сообщением."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, i18n.t("Выбери файл"), "",
+            i18n.t("Файлы") + " (*.txt *.md *.log *.csv *.json *.xml *.html *.py *.js *.ts *.ini *.pdf *.docx "
+                   "*.png *.jpg *.jpeg *.bmp *.webp *.gif);;" + i18n.t("Все файлы") + " (*)")
+        if path:
+            self._attach(path)
+
+    def _attach(self, path):
+        name = os.path.basename(path)
+        kind = filereader.kind(path)
+        if kind == "image":
+            try:
+                with open(path, "rb") as fh:
+                    img = base64.b64encode(fh.read()).decode()
+            except OSError:
+                self.say(i18n.t("Не получилось открыть картинку."))
+                return
+            self._file = {"name": name, "text": "", "image": img}
+        elif kind == "text":
+            text = filereader.read_text(path)
+            if not text:
+                self.say(i18n.t("Не получилось прочитать этот файл: он пустой или не текстовый."))
+                return
+            self._file = {"name": name, "text": text, "image": None}
+        else:
+            self.say(intel.FILE_UNSUPPORTED)
+            return
+        self.file_chip.setText(f"📎  {name}   ×")
+        self.file_chip.show()
+
+    def _clear_file(self):
+        self._file = None
+        self.file_chip.hide()
+
+    def _run_image(self, q, f):
+        """Вопрос про картинку: отвечает модель, которая видит картинки. Ответ — обычной репликой."""
+        def work():
+            try:
+                text = self.brain.quick_answer(intel.IMAGE_CHAT_PROMPT.format(question=q), f["image"])
+                self.answered.emit(Reply(text or i18n.t("Не получилось разобрать картинку."), "curious"))
+            except Exception as e:
+                self.answered.emit(Reply(f"Ой, что-то пошло не так: {e}", "worried"))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _make_title(self, cid, question, answer):
+        """Mico придумывает короткое название чата по первому обмену. Пишется в фоне; список обновится сам."""
+        def work():
+            try:
+                prompt = (f"Вопрос: {question[:300]}\nОтвет: {answer[:400]}\n\n"
+                          "Придумай короткое название этого разговора: 2–4 слова по-русски, без кавычек и точки. "
+                          "Только название.")
+                raw = (self.brain._chat(prompt, self.cfg["text_model"]) or "").strip()
+                title = raw.strip('"«»\' ').splitlines()[0][:60] if raw else ""
+                if title and self._store is not None:
+                    self._store.conv_set_title(cid, title)
+                    self.title_ready.emit()
+            except Exception:
+                pass                                   # название — не главное: без него чат тоже работает
+        threading.Thread(target=work, daemon=True).start()
+
+    def _icon_btn(self, icon):
+        b = QPushButton()
+        b.setObjectName("iconBtn")
+        b.setIcon(icon)
+        b.setIconSize(QSize(18, 18))
+        b.setFixedSize(30, 30)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        return b
+
+    def _add_row(self, role, body_html, rid=None):
+        row = chat_look.MessageRow(role, body_html, accent=self.cfg["color"])
+        row.link.connect(self.on_link)
+        self.msgs.insertWidget(self.msgs.count() - 2, row)          # перед «печатает» и пустым местом
+        row.fit(self.scroll.viewport().width())
+        if rid is not None:
+            self._rows[rid] = row
+        self._update_greeting()
+        return row
+
+    def _clear_rows(self):
+        for i in reversed(range(self.msgs.count())):
+            w = self.msgs.itemAt(i).widget()
+            if w is not None and w is not self.typing and w is not self.greeting:
+                self.msgs.takeAt(i)
+                w.deleteLater()
+        self._rows.clear()
+        self._update_greeting()
+
+    def _update_greeting(self):
+        """Приветствие — только в пустом чате: как только появилась реплика, оно уходит."""
+        has = any(isinstance(self.msgs.itemAt(i).widget(), chat_look.MessageRow) for i in range(self.msgs.count()))
+        self.greeting.setVisible(not has)
+
+    def _refresh_profile(self):
+        name = self.cfg.get("user_name", "")
+        self.avatar.set_name(name)
+        self.greeting.set_name(name)
+        if getattr(self, "side", None) is not None:
+            self.side.set_profile(name)
+
+    def edit_profile(self):
+        """Аватар: имя и то, что Mico AI должен знать о пользователе. Сохраняется сразу."""
+        dlg = chat_look.ProfileDialog(self.cfg.get("user_name", ""), self.cfg.get("user_about", ""),
+                                      theme.is_dark(self.cfg), self.cfg["color"], self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            name, about = dlg.values()
+            self.cfg["user_name"], self.cfg["user_about"] = name, about
+            save_cfg(self.cfg)
+            self._refresh_profile()
+            self.profile_changed.emit()
+
+    def _scroll_bottom(self, animate=False):
+        """Лента уезжает вниз, если человек за ней не следит сам. Во время печати — без анимации, ровно."""
+        if not self._follow_on:
+            return
+        QTimer.singleShot(30, lambda: setattr(self, "_scroll_anim", chat_look.scroll_to_bottom(self.scroll, animate)))
+
+    def _stop_follow(self):
+        self._follow_on = False                                     # человек сам крутит — не мешаем
+        if self._scroll_anim is not None:
+            self._scroll_anim.stop()
+            self._scroll_anim = None
+
+    def _start_reveal(self, text):
+        """Текст Mico AI появляется по буквам: длинный — дольше, короткий — быстрее."""
+        row = self._add_row("mico", "", rid=self._pending_rid)
+        self._pending_rid = None
+        total_ms = min(9000, max(900, 25 * len(text)))
+        ticks = max(1, total_ms // 22)
+        self._reveal = {"row": row, "text": text, "pos": 0, "step": max(1, -(-len(text) // ticks))}
+        self.blob.talking = True
+        self._follow_on = True
+        self._reveal_timer.start(22)
+
+    def _reveal_tick(self):
+        r = self._reveal
+        if r is None:
+            self._reveal_timer.stop()
+            return
+        r["pos"] = min(len(r["text"]), r["pos"] + r["step"])
+        r["row"].label.setText(html.escape(r["text"][:r["pos"]]).replace("\n", "<br>"))
+        self._scroll_bottom()
+        if r["pos"] >= len(r["text"]):
+            self._finish_reveal()
+            QTimer.singleShot(400, self._stop_talk)
+            self._pump()
+
+    def _finish_reveal(self):
+        """Допечатываем сразу (человек начал печатать или ответ закончился)."""
+        r = self._reveal
+        self._reveal_timer.stop()
+        if r is not None:
+            r["row"].label.setText(html.escape(r["text"]).replace("\n", "<br>"))
+        self._reveal = None
+
     def say(self, text):
         self.queue.append(("text", text))
         self._pump()
 
     def _pump(self):
-        """Ответ появляется целиком. Чат прокручивается вниз: короткий — сразу, длинный — плавно, по мере ответа."""
-        sb = self.log.verticalScrollBar()
-        top = sb.maximum() + self.log.viewport().height()     # высота текста до ответа
-        talk = 0
+        """Ответ появляется по очереди: текст печатается по буквам, карточки и картинки — сразу."""
+        if self._reveal is not None:                                  # уже печатаем: продолжим, когда допечатаем
+            return
         while self.queue:
             kind, val = self.queue.pop(0)
             if kind == "html":
-                self.log.append(val)
+                self._add_row("mico", val.replace("<b>Mico AI:</b><br>", "", 1))
+                self._scroll_bottom(animate=True)
+            elif kind == "img":                                      # картинку кладём в ленту, а не по ссылке
+                row = self._add_row("mico", "")
+                row.set_image(val)
+                self._scroll_bottom(animate=True)
             elif kind == "wi":
                 self.mico_said.emit(val)
             else:
-                self.log.append("<b>Mico AI:</b><br>" + html.escape(val).replace("\n", "<br>") + "<br>")
                 self.mico_said.emit(val)
-                self.blob.talking = True
-                talk = max(talk, min(12000, max(1500, 28 * len(val))))
-                QTimer.singleShot(min(2500, 300 + 25 * len(val)), self._stop_talk)
-        self._follow(top, talk)
+                self._start_reveal(val)
+                return
+        self._scroll_bottom(animate=True)
 
     def _stop_talk(self):
-        self.blob.talking = False
+        if not self.blob.voice_active:            # настоящая речь сама решает, когда рот закрыть
+            self.blob.talking = False
 
-    def _follow(self, top, talk_ms):
-        """top — высота текста до нового ответа. Ответ помещается в окно — чат быстро едет в конец.
-        Не помещается — сначала показываем начало ответа, потом чат плавно спускается вниз."""
-        def go():
-            sb = self.log.verticalScrollBar()
-            end = sb.maximum()                                   # конец текста (после layout)
-            long_ = end > top                                    # ответ выше окна
-            self._stop_follow()
-            if long_:
-                sb.setValue(int(top))                            # начало нового ответа — наверху окна
-            a = QPropertyAnimation(sb, b"value", self)
-            a.setDuration(int(talk_ms or 2000) if long_ else 250)
-            a.setStartValue(sb.value())
-            a.setEndValue(end)
-            a.setEasingCurve(QEasingCurve.Type.Linear if long_ else QEasingCurve.Type.OutCubic)
-            a.start()
-            self._scroll_anim = a
-        QTimer.singleShot(60, go)                                # даём Qt пересчитать высоту текста
+    # ----- чаты: начать, открыть, искать -----
+    def _ensure_conv(self, first_text):
+        """Первый вопрос в новом чате — создаёт чат. Если память выключена, чат живёт только в этом окне."""
+        if self.conv_id is None and self._store is not None and self.cfg.get("memory_on", True):
+            title = " ".join(first_text.split())[:40] or i18n.t("Новый чат")
+            self.conv_id = self._store.conv_new(title, time.time())
+            self.brain.set_conversation(self.conv_id)
+        return self.conv_id
 
-    def _stop_follow(self):
-        if self._scroll_anim is not None:
-            self._scroll_anim.stop()
-            self._scroll_anim = None
+    def _save_msg(self, role, text):
+        if self.conv_id is None or self._store is None or not text:
+            return None
+        return self._store.conv_add_msg(self.conv_id, time.time(), role, text)
+
+    def _refresh_side(self):
+        if self._store is not None:
+            self.side.set_chats(self._store.conv_list(60), self.conv_id)
+
+    def _place_side(self):
+        w = int(self.card.width() * 0.74)
+        self.side.setGeometry(0, 0, w, self.card.height())
+        return w
+
+    def _toggle_side(self, on=None):
+        """Боковое меню открыто всегда: недавние чаты видны сразу. Оставлено для совместимости."""
+        self.side.show()
+
+    def new_chat(self):
+        if self.busy:
+            return
+        self.conv_id = None
+        self._clear_rows()
+        self.brain.set_conversation(None)
+        self.search.clear()
+        self._refresh_side()
+        self._toggle_side(False)
+        self.inp.setFocus()
+
+    def open_chat(self, cid, focus_rid=None):
+        if self.busy or self._store is None:
+            return
+        self.conv_id = cid
+        self._clear_rows()
+        for rid, ts, role, text in self._store.conv_messages(cid, limit=200):
+            row = self._add_row("user" if role == "user" else "mico",
+                                html.escape(text).replace("\n", "<br>"), rid=rid)
+        self.brain.set_conversation(cid)
+        self.search.clear()
+        self._refresh_side()                    # подсветить открытый чат в боковом меню
+        self._toggle_side(False)
+        QTimer.singleShot(60, lambda: self._jump_to(focus_rid) if focus_rid else self._scroll_bottom())
+        self._follow_on = focus_rid is None
+
+    def _jump_to(self, rid):
+        row = self._rows.get(rid)
+        if row is None:
+            return
+        self._follow_on = False
+        self.scroll.ensureWidgetVisible(row, 0, 24)
+
+    def _search_changed(self, text):
+        q = " ".join(text.split())
+        if len(q) < 2 or self._store is None:
+            self.results.hide()
+            return
+        hits = [h for h in self._store.conv_search(q, limit=200) if h[0] == self.conv_id][:25]
+        titles = {}
+        self.results.clear()
+        for cid, rid, ts, role, t in hits:
+            self.results.addItem(chat_look.result_item(titles.get(cid, i18n.t("Чат")), t, q, cid, rid))
+        if not hits:
+            it = QListWidgetItem(i18n.t("Ничего не нашлось. Попробуй другое слово."))
+            it.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.results.addItem(it)
+        h = min(240, 8 + 52 * self.results.count())
+        top = self.head_bar.geometry().bottom() + 4
+        self.results.setGeometry(self.head_bar.x() + 6, top, self.head_bar.width() - 12, h)
+        self.results.raise_()
+        self.results.show()
+
+    def _open_result(self, item):
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if not data:
+            return
+        cid, rid = data
+        self.results.hide()
+        if cid == self.conv_id:
+            self._jump_to(rid)
+        else:
+            self.open_chat(cid, focus_rid=rid)
 
 # =============================== Настройки ===============================
 # Подсказки к настройкам: что это, стоит ли включать и когда
 HELP = {
-    "linked": ("Чат меняется вместе с Mico AI",
-               "Один ползунок меняет размер и шара, и окна чата.",
-               "включи, если хочешь всё крупнее или мельче сразу. Выключи, если нужен большой чат и маленький шар."),
-    "outline": ("Обводка вокруг чата",
-                "Цветная рамка вокруг окна чата. Только внешний вид.",
-                "выключи для минималистичного вида, включи, чтобы чат был заметнее на фоне."),
-    "locc": ("Геопозиция для погоды",
-             "Windows отдаёт Mico AI координаты, чтобы узнать погоду в твоём месте.",
-             "включи, если хочешь погоду без ввода города. Выключи — тогда укажи город вручную."),
-    "greet": ("Здороваться при включении ПК",
-              "При входе в Windows Mico AI говорит «Добрый день» или «Добрый вечер» и показывает пункты приветствия.",
-              "включи, если приятно видеть приветствие. Выключи для тихого запуска."),
-    "auto": ("Запуск с Windows",
-             "Mico AI стартует сам при входе в Windows и после разблокировки экрана.",
-             "включи, если пользуешься Mico AI каждый день. Выключи, если запускаешь его вручную."),
-    "mem": ("Запоминать действия",
-            "Mico AI записывает твои команды и открытые программы (зашифровано) и учится на привычках.",
-            "включи для подсказок, кнопок и «что я делал». Выключи, если не хочешь записей: тогда эти функции не работают."),
-    "pbr": ("Напоминание о перерыве",
-            "Mico AI напомнит отдохнуть, если работаешь без остановки дольше заданного времени.",
-            "включи, если забываешь делать перерывы."),
-    "quiet": ("Режим тишины",
-              "Mico AI не здоровается, не предлагает помощь и не заговаривает первым. Напоминания, которые ты сам поставил, работают.",
-              "включи для созвона, фильма или работы без отвлечений. Выключи, когда хочешь живого компаньона."),
+    "linked": (i18n.t("Чат меняется вместе с Mico AI"),
+               i18n.t("Один ползунок меняет размер и шара, и окна чата."),
+               i18n.t("включи, если хочешь всё крупнее или мельче сразу. Выключи, если нужен большой чат и маленький шар.")),
+    "outline": (i18n.t("Обводка вокруг чата"),
+                i18n.t("Цветная рамка вокруг окна чата. Только внешний вид."),
+                i18n.t("выключи для минималистичного вида, включи, чтобы чат был заметнее на фоне.")),
+    "locc": (i18n.t("Геопозиция для погоды"),
+             i18n.t("Windows отдаёт Mico AI координаты, чтобы узнать погоду в твоём месте."),
+             i18n.t("включи, если хочешь погоду без ввода города. Выключи — тогда укажи город вручную.")),
+    "greet": (i18n.t("Здороваться при включении ПК"),
+              i18n.t("При входе в Windows Mico AI говорит «Добрый день» или «Добрый вечер» и показывает пункты приветствия."),
+              i18n.t("включи, если приятно видеть приветствие. Выключи для тихого запуска.")),
+    "auto": (i18n.t("Запуск с Windows"),
+             i18n.t("Mico AI стартует сам при входе в Windows и после разблокировки экрана."),
+             i18n.t("включи, если пользуешься Mico AI каждый день. Выключи, если запускаешь его вручную.")),
+    "mem": (i18n.t("Запоминать действия"),
+            i18n.t("Mico AI записывает твои команды и открытые программы (зашифровано) и учится на привычках."),
+            i18n.t("включи для подсказок, кнопок и «что я делал». Выключи, если не хочешь записей: тогда эти функции не работают.")),
+    "pbr": (i18n.t("Напоминание о перерыве"),
+            i18n.t("Mico AI напомнит отдохнуть, если работаешь без остановки дольше заданного времени."),
+            i18n.t("включи, если забываешь делать перерывы.")),
+    "quiet": (i18n.t("Режим тишины"),
+              i18n.t("Mico AI не здоровается, не предлагает помощь и не заговаривает первым. Напоминания, которые ты сам поставил, работают."),
+              i18n.t("включи для созвона, фильма или работы без отвлечений. Выключи, когда хочешь живого компаньона.")),
 }
 
 
-class NoWheelSlider(QSlider):
+class NoWheelSlider(RoundSlider):
     """Колесо мыши листает окно настроек, а не меняет ползунок. Двигать ползунок можно мышью и клавишами."""
     def wheelEvent(self, e):
         e.ignore()
@@ -617,29 +1044,6 @@ class NoWheelSpinBox(QSpinBox):
         e.ignore()
 
 
-class _OpenOnClick(QObject):
-    """Нажатие на текст поля выбора открывает список, повторное — закрывает.
-    Qt закрывает список сам при нажатии, поэтому помним момент закрытия и не открываем его обратно тем же кликом."""
-    def __init__(self, combo):
-        super().__init__(combo)
-        self.combo = combo
-        self._hidden_at = 0.0
-        combo.view().installEventFilter(self)
-
-    def eventFilter(self, obj, ev):
-        import time
-        if obj is self.combo.view():
-            if ev.type() == QEvent.Type.Hide:
-                self._hidden_at = time.monotonic()
-            return False
-        if ev.type() == QEvent.Type.MouseButtonPress and ev.button() == Qt.MouseButton.LeftButton:
-            if self.combo.view().isVisible():
-                self.combo.hidePopup()
-            elif time.monotonic() - self._hidden_at > 0.3:
-                self.combo.showPopup()
-        return False
-
-
 class NoWheelComboBox(QComboBox):
     def wheelEvent(self, e):
         e.ignore()
@@ -658,17 +1062,17 @@ class AboutDialog(QDialog):
     """О программе: версия, канал и что нового в этой сборке."""
     def __init__(self, parent, cfg):
         super().__init__(parent)
-        self.setWindowTitle("О программе Mico AI")
+        self.setWindowTitle(i18n.t("О программе Mico AI"))
         self.setMinimumWidth(440)
         v = QVBoxLayout(self)
-        head = QLabel(f"<b style='font-size:16px'>Mico AI {version.display_version(cfg.get('update_channel', 'stable'))}</b>")
+        head = QLabel(f"<span style='font-size:16px'>{theme.heading('Mico AI ' + version.display_version(cfg.get('update_channel', 'stable')))}</span>")
         head.setTextFormat(Qt.TextFormat.RichText)
         v.addWidget(head)
         entry = version.CHANGELOG.get(version.APP_VERSION, {})
         items = "".join(f"<li>{html.escape(c)}</li>" for c in entry.get("changes", [])) \
-            or "<li>Исправления и мелкие улучшения.</li>"
+            or i18n.t("<li>Исправления и мелкие улучшения.</li>")
         body = QTextBrowser()
-        body.setHtml(f"<b>Что нового в этой сборке</b><ul>{items}</ul>")
+        body.setHtml(f"<p style='margin-top:0'>{theme.heading(i18n.t('Что нового в этой сборке'))}</p><ul>{items}</ul>")
         v.addWidget(body)
         close = QPushButton("Закрыть")
         close.clicked.connect(self.accept)
@@ -692,41 +1096,11 @@ def _set_widget_value(w, value):
         w.setText("" if value is None else str(value))
 
 
-class ClickLabel(QLabel):
-    """Подпись, по которой можно кликнуть: нажатие переключает галочку рядом."""
-    clicked = pyqtSignal()
-
-    def mousePressEvent(self, e):
-        self.clicked.emit()
-        super().mousePressEvent(e)
+SETTINGS_SIZES = [("compact", i18n.t("Компактное"), (800, 640)), ("medium", i18n.t("Обычное"), (940, 720)),
+                  ("large", i18n.t("Просторное"), (1100, 800))]
 
 
-SETTINGS_SIZES = [("compact", "Компактное", (560, 600)), ("medium", "Обычное", (660, 740)),
-                  ("large", "Просторное", (820, 880))]
-
-
-class Switch(QAbstractButton):
-    """Переключатель-пилюля: дорожка и белая кнопка. Включён — цвет акцента Windows."""
-    ON = "#4cc2c4"
-    OFF = "#4a4a4a"
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setCheckable(True)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedSize(40, 22)
-
-    def paintEvent(self, e):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(self.ON if self.isChecked() else self.OFF))
-        p.drawRoundedRect(QRectF(0, 0, self.width(), self.height()), self.height() / 2, self.height() / 2)
-        d = self.height() - 6
-        x = self.width() - 3 - d if self.isChecked() else 3
-        p.setBrush(QColor("#ffffff"))
-        p.drawEllipse(QRectF(x, 3, d, d))
-        p.end()
+CHAT_W, CHAT_H = 560, 520      # стандартный размер чата Mico AI, px (с боковым меню, было 350×420)
 
 
 class Expander(QFrame):
@@ -791,74 +1165,71 @@ class _ExpHead(QFrame):
         super().mousePressEvent(e)
 
 
-class WrapCheck(QWidget):
-    """Пункт настройки: подпись слева (переносится), переключатель справа. Интерфейс тот же, что у галочки."""
-    toggled = pyqtSignal(bool)
-
-    def __init__(self, text="", parent=None):
-        super().__init__(parent)
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(12)
-        self._sw = Switch()
-        self._lbl = ClickLabel(text)
-        self._lbl.setWordWrap(True)
-        self._lbl.clicked.connect(self._sw.toggle)
-        lay.addWidget(self._lbl, 1)
-        lay.addWidget(self._sw, 0, Qt.AlignmentFlag.AlignVCenter)
-        self._sw.toggled.connect(self.toggled)
-        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-
-    def isChecked(self):
-        return self._sw.isChecked()
-
-    def setChecked(self, on):
-        self._sw.setChecked(bool(on))
-
-    def setToolTip(self, text):
-        super().setToolTip(text)
-        self._lbl.setToolTip(text)
-        self._sw.setToolTip(text)
-
-    def setText(self, text):
-        self._lbl.setText(text)
-
-    def text(self):
-        return self._lbl.text()
-
 class SettingsDialog(QDialog):
     status = pyqtSignal(str)
     pulled = pyqtSignal(str)
-    pull_progress = pyqtSignal(int, int)   # скачано и всего байт; (0, 0) — скачивание закончилось
+    pull_progress = pyqtSignal(int, int)   # скачано и всего байт; (0, 0) — размер ещё неизвестен
+    pull_finished = pyqtSignal(bool)       # скачивание закончилось: True — успех
     deleted = pyqtSignal(str)              # модель Ollama удалена (имя)
     models_ready = pyqtSignal(object)      # список установленных моделей Ollama, посчитан в фоне
 
     def __init__(self, cfg, blob, panel, hooks, parent=None):
         super().__init__(parent)
         self.cfg, self.blob, self.panel, self.hooks, self.orig = cfg, blob, panel, hooks, dict(cfg)
-        self.setWindowTitle("Настройки Mico AI")
+        self.setWindowTitle(i18n.t("Настройки Mico AI"))
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
-        self.setMinimumSize(520, 420)
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint)   # своя шапка в стиле макета (перетаскивается мышью)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)   # скруглённые углы и свечение рамки
+        self.setObjectName("settingsWin")
+        self.setMinimumSize(760, 560)
         self._apply_size("compact")                     # размер окна настроек фиксированный
+        self._drag = None                               # шапку тянут мышью: здесь смещение от угла окна
         self._style_dialog()
         self._reg = {}                                  # ключ настройки → её элемент (для кнопки «Сбросить»)
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 16, 16, 16)        # поле вокруг рамки, чтобы свечение не резалось
+        frame = QFrame()
+        frame.setObjectName("frame")
+        outer.addWidget(frame)
+        root = QVBoxLayout(frame)
+        root.setContentsMargins(20, 14, 20, 16)
+        root.setSpacing(12)
+        # шапка: логотип, название, поиск и кнопки окна — как в макете
+        head = QHBoxLayout()
+        head.setSpacing(10)
+        logo = QLabel()
+        logo.setPixmap(settings_look.logo_pixmap(26))
+        head.addWidget(logo)
+        win_title = QLabel(i18n.t("Настройки Mico AI"))
+        win_title.setObjectName("winTitle")
+        head.addWidget(win_title)
+        head.addSpacing(18)
         # поиск по настройкам: набери слово — останутся только подходящие пункты
         self.search = QLineEdit()
         self.search.setObjectName("search")
-        self.search.setPlaceholderText("Поиск по настройкам")
+        self.search.setPlaceholderText(i18n.t("Поиск по настройкам"))
         self.search.setClearButtonEnabled(True)
         import uiicons as _ui
-        self.search.addAction(_ui.icon("search", "#8e8e93", 16), QLineEdit.ActionPosition.LeadingPosition)
-        root.addWidget(self.search)
-        self.found_hint = QLabel("Ничего не нашлось. Попробуй другое слово.")
+        self.search.addAction(_ui.icon("search", settings_look.ink(cfg["color"], theme.is_dark(cfg)), 16),
+                              QLineEdit.ActionPosition.LeadingPosition)
+        head.addWidget(self.search, 1)
+        for text, obj, handler in (("—", "winBtn", self.showMinimized),
+                                   ("☐", "winBtn", self._toggle_max),
+                                   ("✕", "winClose", self.reject)):
+            b = QPushButton(text)
+            b.setObjectName(obj)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(handler)
+            head.addWidget(b)
+        root.addLayout(head)
+        self.found_hint = QLabel(i18n.t("Ничего не нашлось. Попробуй другое слово."))
         self.found_hint.setObjectName("hint")
         self.found_hint.setVisible(False)
         root.addWidget(self.found_hint)
         self._vis = {}                                  # исходная видимость строк (чтобы поиск вернул всё как было)
         tabs = self._tabs = sidetabs.SideTabs()                    # разделы слева, содержимое справа
         tabs.set_icon_color("#8e8e93")
-        tabs.set_accent(theme.windows_accent())
+        tabs.set_accent(cfg["color"])
         root.addWidget(tabs)
         self.search.textChanged.connect(self._filter_settings)
 
@@ -869,30 +1240,26 @@ class SettingsDialog(QDialog):
         self.cbtn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cbtn.clicked.connect(self.pick)
         self._paint_accent_btn()
-        self._row(f, "Цвет Mico AI", self.cbtn, "color")
-        self.cres = QPushButton("Вернуть стандартный цвет Mico AI")
+        self._row(f, i18n.t("Цвет Mico AI"), self.cbtn, "color")
+        self.cres = QPushButton(i18n.t("Вернуть стандартный цвет Mico AI"))
         self.cres.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cres.clicked.connect(self._reset_mico_color)
-        f.addRow("", self.cres)
+        f.addRow("", self._with_hint(self.cres, "Вернёт цвет Mico AI, который стоит по умолчанию."))
         self.th = NoWheelComboBox()
-        for key, name in (("auto", "Как в системе (Windows)"), ("light", "Светлая"), ("dark", "Тёмная")):
+        for key, name in (("auto", i18n.t("Как в системе (Windows)")), ("light", i18n.t("Светлая")), ("dark", i18n.t("Тёмная"))):
             self.th.addItem(name, key)
         self.th.setCurrentIndex(max(0, self.th.findData(cfg.get("theme", "auto"))))
         self.th.currentIndexChanged.connect(self.live_theme)
-        self._row(f, "Тема чата и окон", self.th, "theme")
+        self._row(f, i18n.t("Тема чата и окон"), self.th, "theme")
 
         look_size = QWidget()                         # Размер и прозрачность
         f = QFormLayout(look_size)
         self.sc = NoWheelSlider(Qt.Orientation.Horizontal)
         self.sc.setRange(40, 200)
         self.sc.setValue(int(cfg["scale"] * 100))
-        self.op = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.op.setRange(30, 100)
-        self.op.setValue(int(cfg["opacity"] * 100))
-        for s_ in (self.sc, self.op):
-            s_.valueChanged.connect(self.live)
-        self._row(f, "Размер Mico AI", with_readout(self.sc, " %"), "scale")
-        self.linked = WrapCheck("Чат меняется вместе с Mico AI (один ползунок)")
+        self.sc.valueChanged.connect(self.live)
+        self._row(f, i18n.t("Размер Mico AI"), with_readout(self.sc, " %"), "scale")
+        self.linked = WrapCheck(i18n.t("Чат меняется вместе с Mico AI (один ползунок)"))
         self.linked.setChecked(cfg.get("chat_linked", True))
         self.linked.toggled.connect(self.live_linked)
         f.addRow(self._hc(self.linked, "linked"))
@@ -900,28 +1267,23 @@ class SettingsDialog(QDialog):
         self.csc.setRange(60, 200)
         self.csc.setValue(int(cfg.get("chat_scale", 1.0) * 100))
         self.csc.valueChanged.connect(self.live_chat)
-        self.csc_lbl = QLabel("Размер чата")
+        self.csc_lbl = QLabel(i18n.t("Размер чата"))
         self.csc_box = with_readout(self.csc, " %")
         self._chat_size_hint()
         self._row(f, self.csc_lbl, self.csc_box, "chat_scale")
-        self._row(f, "Прозрачность", with_readout(self.op, " %"), "opacity")
-        self.chop = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.chop.setRange(30, 100)
-        self.chop.setValue(int(round(intel.chat_opacity(cfg) * 100)))
-        self._row(f, "Прозрачность чатов", with_readout(self.chop, " %"), "chat_opacity")
         self.sleep_fps = NoWheelComboBox()
-        for fps in (60, 30, 15, 10):
+        for fps in (60, 30, 20, 15, 10):
             self.sleep_fps.addItem(f"{fps} кадров в секунду", fps)
-        self.sleep_fps.setCurrentIndex(max(0, self.sleep_fps.findData(int(cfg.get("anim_sleep_fps", 60)))))
-        f.addRow("Частота анимации во сне", self.sleep_fps)
+        self.sleep_fps.setCurrentIndex(max(0, self.sleep_fps.findData(int(cfg.get("anim_sleep_fps", 20)))))
+        self._row(f, i18n.t("Частота анимации во сне"), self.sleep_fps, "anim_sleep_fps")
 
         look_outline = QWidget()                      # Обводки и подсветка
         f = QFormLayout(look_outline)
-        self.outline = WrapCheck("Обводка вокруг окна чата")
+        self.outline = WrapCheck(i18n.t("Обводка вокруг окна чата"))
         self.outline.setChecked(cfg.get("chat_outline", True))
         self.outline.toggled.connect(self.live_outline)
         f.addRow(self._hc(self.outline, "outline"))
-        self.in_outline = WrapCheck("Обводка поля ввода в чате Mico AI")
+        self.in_outline = WrapCheck(i18n.t("Обводка поля ввода в чате Mico AI"))
         self.in_outline.setChecked(bool(cfg.get("wi_input_outline", True)))
         self.in_outline.toggled.connect(lambda on: self._set_outline("wi_input_outline", on))
         f.addRow(self._block(self.in_outline, "wi_input_outline"))
@@ -931,55 +1293,46 @@ class SettingsDialog(QDialog):
         f = QFormLayout(pos)
         self.sleep_min = NoWheelSpinBox()
         self.sleep_min.setRange(0, 30)
-        self.sleep_min.setSuffix(" мин (0 — не засыпать)")
+        self.sleep_min.setSuffix(i18n.t(" мин (0 — не засыпать)"))
         self.sleep_min.setValue(cfg.get("sleep_after_min", 3))
-        self._row(f, "Засыпать, если никто не обращается", self.sleep_min, "sleep_after_min")
+        self._row(f, i18n.t("Засыпать, если никто не обращается"), self.sleep_min, "sleep_after_min")
 
         start = QWidget()                             # Запуск и поведение
         f = QFormLayout(start)
-        self.greet = WrapCheck("Здороваться при включении ПК (день/вечер, погода, что делал вчера)")
+        self.greet = WrapCheck(i18n.t("Здороваться при включении ПК (день/вечер, погода, что делал вчера)"))
         self.greet.setChecked(cfg["greet_on_start"])
-        self.auto = WrapCheck("Запускать вместе с Windows (вход в систему)")
+        self.auto = WrapCheck(i18n.t("Запускать вместе с Windows (вход в систему)"))
         self.auto.setChecked(autostart.status()[0])        # показываем то, что реально стоит в Планировщике
-        self.lang = NoWheelComboBox()
-        for code, name in i18n.LANGUAGES:
-            self.lang.addItem(name, code)
-        self.lang.setCurrentIndex(max(0, self.lang.findData(cfg.get("language", "ru"))))
-        lang_row = QWidget()
-        lh = QHBoxLayout(lang_row)
-        lh.setContentsMargins(0, 0, 0, 0)
-        lh.addWidget(self.lang, 1)
-        f.addRow(i18n.t("Язык"), lang_row)
-        lang_hint = QLabel(i18n.t("Язык меняется после перезапуска Mico AI."))
-        lang_hint.setObjectName("hint")
-        f.addRow(lang_hint)
         f.addRow(self._hc(self.greet, "greet"))
         f.addRow(self._hc(self.auto, "auto"))
-        self.quiet = WrapCheck("Режим тишины: без приветствий, инициативы и подсказок")
+        self.quiet = WrapCheck(i18n.t("Режим тишины: без приветствий, инициативы и подсказок"))
         self.quiet.setChecked(cfg.get("quiet_mode", False))
         f.addRow(self._hc(self.quiet, "quiet"))
-        self.updchk = WrapCheck("Проверять новые версии Mico AI при запуске (раз в сутки, без скачивания)")
+        self.lang = NoWheelComboBox()                 # язык интерфейса; применяется после перезапуска
+        for code, name in i18n.LANGUAGES:
+            self.lang.addItem(name, code)
+        self.lang.setCurrentIndex(max(0, self.lang.findData(cfg.get("language", "en"))))
+        self._row(f, i18n.t("Язык интерфейса"), self.lang, "language")
+        self.lang_note = QLabel(i18n.t("Язык меняется после перезапуска Mico AI."))
+        self.lang_note.setObjectName("hint")
+        f.addRow(self.lang_note)
+        self.updchk = WrapCheck(i18n.t("Проверять новые версии Mico AI при запуске (раз в сутки, без скачивания)"))
         self.updchk.setChecked(cfg.get("update_check", True))
         f.addRow(self._block(self.updchk, "update_check"))
 
         hist = QWidget()                              # История и поиск
         f = QFormLayout(hist)
-        self.se = NoWheelComboBox()
-        self.se.addItems(list(SEARCH_ENGINES))
-        cur = next((n for n, u in SEARCH_ENGINES.items() if u == cfg.get("search_url")), "Google")
-        self.se.setCurrentText(cur)
-        self._row(f, "Поиск в интернете", self.se, "search_url")
         self.keep = NoWheelComboBox()                 # сколько хранить историю; «всегда» — без очистки
-        for days, text in ((7, "7 дней"), (30, "30 дней"), (90, "90 дней"), (365, "365 дней"), (0, "всегда")):
+        for days, text in ((7, i18n.t("7 дней")), (30, i18n.t("30 дней")), (90, i18n.t("90 дней")), (365, i18n.t("365 дней")), (0, i18n.t("всегда"))):
             self.keep.addItem(text, days)
         if self.keep.findData(cfg["retention_days"]) < 0:      # значение из файла, которого нет в списке
             self.keep.addItem(f"{cfg['retention_days']} дн.", cfg["retention_days"])
         self.keep.setCurrentIndex(self.keep.findData(cfg["retention_days"]))
-        self._row(f, "Хранить историю", self.keep, "retention_days")
+        self._row(f, i18n.t("Хранить историю"), self.keep, "retention_days")
 
         menu = QWidget()                              # Меню по правому щелчку
         f = QFormLayout(menu)
-        f.addRow(QLabel("<small>Что показывать в меню по правому щелчку. «Выход» есть всегда.</small>"))
+        f.addRow(QLabel(i18n.t("<small>Что показывать в меню по правому щелчку. «Выход» есть всегда.</small>")))
         chosen = [i for i in cfg.get("menu_items", menu_items.DEFAULT_ON) if i in menu_items.LABELS]
         self.mlist = QListWidget()
         for key in list(chosen) + [i for i in menu_items.LABELS if i not in chosen]:
@@ -995,8 +1348,8 @@ class SettingsDialog(QDialog):
         self.mcnt = QLabel()
         self.mlist.itemChanged.connect(self._menu_changed)
         self.mmax.valueChanged.connect(self._menu_changed)
-        f.addRow(self.mlist)
-        self._row(f, "Не больше пунктов", self.mmax, "menu_max")
+        f.addRow(self._with_hint(self.mlist, "Отметь пункты, которые показывать в меню по правому щелчку. Остальные скрыты."))
+        self._row(f, i18n.t("Не больше пунктов"), self.mmax, "menu_max")
         f.addRow(self.mcnt)
         self._menu_changed()
 
@@ -1015,43 +1368,46 @@ class SettingsDialog(QDialog):
         self._greet_count()
         self.gl.itemChanged.connect(self._greet_changed)
         self.city = QLineEdit(cfg.get("city", ""))
-        self.city.setPlaceholderText("например, Москва — если геопозиция недоступна")
-        self.locc = WrapCheck("Разрешить геопозицию (Windows всё равно спросит подтверждение)")
+        self.city.setPlaceholderText(i18n.t("например, Москва — если геопозиция недоступна"))
+        self.locc = WrapCheck(i18n.t("Разрешить геопозицию (Windows всё равно спросит подтверждение)"))
         self.locc.setChecked(cfg.get("loc_consent") is True)
-        f.addRow(QLabel("<b>Что показывать при включении ПК (до 3)</b>"))
-        f.addRow(self.gl)
+        f.addRow(QLabel(theme.heading(i18n.t("Что показывать при включении ПК (до 3)"))))
+        f.addRow(self._with_hint(self.gl, "Отметь, что говорить при включении ПК. Можно выбрать до трёх пунктов."))
         f.addRow(self.gcnt)
-        self._row(f, "Город", self.city, "city")
-        f.addRow(QLabel("<small>Город можно писать из списка крупных городов России или координатами «55.75,37.62».</small>"))
+        self.wstart = WrapCheck(i18n.t("Погода при запуске Mico AI"))       # отдельно: выключить только погоду
+        self.wstart.setChecked(cfg.get("weather_on_start", True))
+        f.addRow(self._block(self.wstart, "weather_on_start"))
+        self._row(f, i18n.t("Город"), self.city, "city")
+        f.addRow(QLabel(i18n.t("<small>Город можно писать из списка крупных городов России или координатами «55.75,37.62».</small>")))
         f.addRow(self._hc(self.locc, "locc"))
 
         smart_b = QWidget()                           # Память и перерывы
         f = QFormLayout(smart_b)
-        self.mem = WrapCheck("Запоминать мои команды и программы и учиться на привычках")
+        self.mem = WrapCheck(i18n.t("Запоминать мои команды и программы и учиться на привычках"))
         self.mem.setChecked(cfg.get("memory_on", True))
         f.addRow(self._hc(self.mem, "mem"))
-        f.addRow(QLabel("<small>Журнал зашифрован и хранится только на этом ПК. Срок хранения задаётся выше.</small>"))
-        self.pbr = WrapCheck("Напоминать о перерыве, если работаешь без остановки")
+        f.addRow(QLabel(i18n.t("<small>Журнал зашифрован и хранится только на этом ПК. Срок хранения задаётся выше.</small>")))
+        self.pbr = WrapCheck(i18n.t("Напоминать о перерыве, если работаешь без остановки"))
         self.pbr.setChecked(cfg.get("proactive_breaks", True))
         self.pbr_min = NoWheelSpinBox()
         self.pbr_min.setRange(15, 240)
-        self.pbr_min.setSuffix(" мин")
+        self.pbr_min.setSuffix(i18n.t(" мин"))
         self.pbr_min.setValue(cfg.get("proactive_break_min", 60))
         f.addRow(self._hc(self.pbr, "pbr"))
-        self._row(f, "Перерыв через", self.pbr_min, "proactive_break_min")
-        f.addRow(QLabel("<small>Экран смотрит только локальная модель (VLM), картинка никуда не отправляется.</small>"))
+        self._row(f, i18n.t("Перерыв через"), self.pbr_min, "proactive_break_min")
+        f.addRow(QLabel(i18n.t("<small>Экран смотрит только локальная модель (VLM), картинка никуда не отправляется.</small>")))
 
         # --- Свои фразы ---
         helpbox = QWidget()                           # Помощь по буферу и ошибкам
         f = QFormLayout(helpbox)
-        self.wi_clip = WrapCheck("Помощник по буферу: предлагает объяснить текст ошибки")
+        self.wi_clip = WrapCheck(i18n.t("Помощник по буферу: предлагает объяснить текст ошибки"))
         self.wi_clip.setChecked(bool(cfg.get("wi_clip_help", True)))
         self.wi_clip.toggled.connect(lambda on: self.cfg.update(wi_clip_help=bool(on)))
-        f.addRow(self.wi_clip)
-        self.wi_err = WrapCheck("Реакция на ошибки: «программа не отвечает» и окна с ошибкой")
+        f.addRow(self._block(self.wi_clip, "wi_clip_help"))
+        self.wi_err = WrapCheck(i18n.t("Реакция на ошибки: «программа не отвечает» и окна с ошибкой"))
         self.wi_err.setChecked(bool(cfg.get("wi_error_help", True)))
         self.wi_err.toggled.connect(lambda on: self.cfg.update(wi_error_help=bool(on)))
-        f.addRow(self.wi_err)
+        f.addRow(self._block(self.wi_err, "wi_error_help"))
 
         ph = QWidget()
         v = QVBoxLayout(ph)
@@ -1062,12 +1418,12 @@ class SettingsDialog(QDialog):
         for p in self._phrases:
             self.pl.addItem(f"«{p['say']}» → {p['do']}")
         self.psay = QLineEdit()
-        self.psay.setPlaceholderText("когда я пишу, например: работаю")
+        self.psay.setPlaceholderText(i18n.t("когда я пишу, например: работаю"))
         self.pdo = QLineEdit()
-        self.pdo.setPlaceholderText("делай, например: включи не беспокоить; открой телеграм")
-        add_b = QPushButton("Добавить")
+        self.pdo.setPlaceholderText(i18n.t("делай, например: включи не беспокоить; открой телеграм"))
+        add_b = QPushButton(i18n.t("Добавить"))
         add_b.clicked.connect(self._phrase_add)
-        del_b = QPushButton("Удалить выбранную")
+        del_b = QPushButton(i18n.t("Удалить выбранную"))
         del_b.clicked.connect(self._phrase_del)
         v.addWidget(self.pl)
         v.addWidget(self.psay)
@@ -1081,20 +1437,20 @@ class SettingsDialog(QDialog):
         btn = QWidget()
         f = QFormLayout(btn)
         self.cmode = NoWheelComboBox()
-        self.cmode.addItem("Mico AI подбирает сам (по моим привычкам)", "auto")
-        self.cmode.addItem("Выбрать вручную (до 6)", "manual")
+        self.cmode.addItem(i18n.t("Mico AI подбирает сам (по моим привычкам)"), "auto")
+        self.cmode.addItem(i18n.t("Выбрать вручную (до 6)"), "manual")
         self.cmode.setCurrentIndex(max(0, self.cmode.findData(cfg.get("chips_mode", "auto"))))
         self.ccount = NoWheelSpinBox()
         self.ccount.setRange(0, chips.MAX_CHIPS)
-        self.ccount.setSpecialValueText("не показывать")
+        self.ccount.setSpecialValueText(i18n.t("не показывать"))
         self.ccount.setValue(cfg.get("chips_count", chips.MAX_CHIPS))
-        self._row(f, "Режим", self.cmode, "chips_mode")
-        self._row(f, "Сколько кнопок (авто)", self.ccount, "chips_count")
-        self.chide = WrapCheck("Скрывать кнопки, когда отправил запрос (вернутся, когда нажмёшь в поле ввода)")
+        self._row(f, i18n.t("Режим"), self.cmode, "chips_mode")
+        self._row(f, i18n.t("Сколько кнопок (авто)"), self.ccount, "chips_count")
+        self.chide = WrapCheck(i18n.t("Скрывать кнопки, когда отправил запрос (вернутся, когда нажмёшь в поле ввода)"))
         self.chide.setChecked(cfg.get("chips_hide_on_send", True))
         f.addRow(self._block(self.chide, "chips_hide_on_send"))
         self.cfilter = QLineEdit()
-        self.cfilter.setPlaceholderText("поиск: например «громче» или «блютуз»")
+        self.cfilter.setPlaceholderText(i18n.t("поиск: например «громче» или «блютуз»"))
         self.cfilter.textChanged.connect(self._filter_chips)
         f.addRow(self.cfilter)
         self.clist = QListWidget()
@@ -1106,11 +1462,11 @@ class SettingsDialog(QDialog):
             it.setCheckState(Qt.CheckState.Checked if c.id in pinned else Qt.CheckState.Unchecked)
             self.clist.addItem(it)
         self.clist.itemChanged.connect(self._chip_checked)
-        f.addRow(self.clist)
+        f.addRow(self._with_hint(self.clist, "Отметь кнопки, которые показывать под ответом. Работает в режиме «Выбрать вручную»."))
         self.cnt = QLabel()
         f.addRow(self.cnt)
         self._update_cnt()
-        reset = QPushButton("Сбросить привычки")
+        reset = QPushButton(i18n.t("Сбросить привычки"))
         reset.clicked.connect(self._reset_usage)
         f.addRow(reset)
         f.addRow(QLabel("<small>Mico AI учится по тому, какие кнопки и команды ты используешь. "
@@ -1121,21 +1477,21 @@ class SettingsDialog(QDialog):
         f = QFormLayout(mod)
         # Список установленных моделей приходит из фонового потока (_refresh_ollama_lists): Ollama может быть занята,
         # и окно настроек не должно из-за этого зависать. Пока — только модель из настроек.
-        self.ollama_hint = QLabel("<small>⚠️ Установленные модели не найдены. Проверь, что Ollama запущен (значок в трее), "
+        self.ollama_hint = QLabel("<small>Установленные модели не найдены. Проверь, что движок моделей запущен, "
                                   "и открой настройки снова. Пока ниже показаны только рекомендованные модели.</small>")
         self.ollama_hint.hide()
         f.addRow(self.ollama_hint)
         self.tm = self._combo([], SUGGEST_TEXT, cfg["text_model"])
-        self._row(f, "Модель для общения", self.tm, "text_model")
+        self._row(f, i18n.t("Модель для общения"), self.tm, "text_model")
         self.vm = self._combo([], SUGGEST_VISION, cfg["vision_model"])
-        self._row(f, "Модель для экрана", self.vm, "vision_model")
+        self._row(f, i18n.t("Модель для экрана"), self.vm, "vision_model")
         f.addRow(QLabel("<small>В списках только модели, которые уже скачаны на этот ПК. "
                         "Нужной нет — скачай её в разделе «Скачивание и удаление».</small>"))
         mod2 = QWidget()                              # скачивание и удаление
         f = QFormLayout(mod2)
         self.pull_pick = NoWheelComboBox()            # только выбор из списка: вписать имя нельзя
         self.pull_pick.setMinimumWidth(260)
-        self.pull_btn = QPushButton("Скачать")
+        self.pull_btn = QPushButton(i18n.t("Скачать"))
         self.pull_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pull_btn.clicked.connect(self.pull)
         dl_row = QWidget()
@@ -1143,7 +1499,7 @@ class SettingsDialog(QDialog):
         dl_l.setContentsMargins(0, 0, 0, 0)
         dl_l.addWidget(self.pull_pick, 1)
         dl_l.addWidget(self.pull_btn)
-        f.addRow("Скачать модель", dl_row)
+        f.addRow(i18n.t("Скачать модель"), dl_row)
         self.pull_bar = QProgressBar()                # прогресс скачивания: скрыт, пока ничего не качается
         self.pull_bar.setRange(0, 100)
         self.pull_bar.setTextVisible(False)
@@ -1158,7 +1514,7 @@ class SettingsDialog(QDialog):
                         "Уже скачанные в список не попадают.</small>"))
         self.del_pick = NoWheelComboBox()             # удаление: выбираешь модель из списка установленных
         self.del_pick.setMinimumWidth(260)
-        d_ref = QPushButton("Обновить список")
+        d_ref = QPushButton(i18n.t("Обновить список"))
         d_ref.setCursor(Qt.CursorShape.PointingHandCursor)
         d_ref.clicked.connect(lambda: self._refresh_ollama_lists())
         d_btn = QPushButton("Удалить")
@@ -1170,34 +1526,54 @@ class SettingsDialog(QDialog):
         del_l.addWidget(self.del_pick, 1)
         del_l.addWidget(d_ref)
         del_l.addWidget(d_btn)
-        f.addRow("Удалить модель", del_row)
+        f.addRow(i18n.t("Удалить модель"), del_row)
         f.addRow(QLabel("<small>Выбери модель из списка установленных и нажми «Удалить». "
-                        "Список берётся из Ollama: если он пуст, запусти Ollama и нажми «Обновить список».</small>"))
+                        "Список берётся из установленных моделей: если он пуст, нажми «Обновить список».</small>"))
         self.stat = QLabel("")
         f.addRow(self.stat)
 
-        def page(*sections):
-            """Раздел: плитки подразделов. Нажал плитку — открылись её настройки. Элемент: (виджет, название[, описание])."""
-            return subpages.SubPages([(sec[0], sec[1], sec[2] if len(sec) > 2 else "", sec[3] if len(sec) > 3 else None)
-                                      for sec in sections])
+        def page(*sections, side=None):
+            """Раздел: карточки одна под другой, с иконками. Элемент: (виджет, название[, описание, иконка]).
+            side — необязательная колонка справа (предпросмотр)."""
+            return settings_look.CardPage([(sec[0], sec[1], sec[2] if len(sec) > 2 else "", sec[3] if len(sec) > 3 else None)
+                                           for sec in sections], settings_look.ink(cfg["color"], theme.is_dark(cfg)), side=side)
 
-        tabs.addTab(page((look, i18n.t("Цвет и тема"), "Цвет Mico AI, тема и размер окна настроек", "drop"),
-                         (look_size, i18n.t("Размер и прозрачность"), "Размер Mico AI, чата и прозрачность", "resize"),
-                         (look_outline, i18n.t("Обводки и подсветка"), "Линии вокруг окон и кнопок", "frame"),
-                         (self._wi_colors_box(cfg), i18n.t("Полоска Mico AI"), "Полоска по краю экрана", "bar")), i18n.t("Вид"), "look")
-        tabs.addTab(page((pos, i18n.t("Положение и сон"), "Где стоит Mico AI и когда он засыпает", "moon"),
-                         (start, i18n.t("Запуск и поведение"), "Автозапуск, приветствие, горячая клавиша", "power"),
-                         (hist, i18n.t("История и поиск"), "Сколько хранить и где искать", "history"),
-                         (menu, i18n.t("Меню по правому щелчку"), "Какие пункты показывать", "menu"),
-                         (self._wi_rhythm_box(cfg), i18n.t("Тишина и загрузка"), "Тихий час и линия нагрузки", "pulse")), i18n.t("Основные"), "general")
-        tabs.addTab(page((ph, i18n.t("Свои фразы"), "Команды из нескольких шагов", "chat"),
-                         (btn, i18n.t("Кнопки под чатом"), "Что показывать под ответом", "buttons"),
-                         (smart_a, i18n.t("Погода и приветствие"), "Что рассказывать при включении ПК", "sun"),
-                         (smart_b, i18n.t("Память и перерывы"), "Что помнить и когда напоминать", "layers"),
-                         (helpbox, i18n.t("Помощь по буферу и ошибкам"), "Когда Mico AI предлагает помощь сам", "bolt")), i18n.t("Функции"), "functions")
+        # Вид: как Mico AI и окна выглядят
+        tabs.addTab(page((look, i18n.t("Цвет и тема"), i18n.t("Цвет Mico AI, тема и размер окна настроек"), "drop"),
+                         (look_size, i18n.t("Размер и прозрачность"), i18n.t("Размер Mico AI, чата и прозрачность"), "resize"),
+                         (look_outline, i18n.t("Обводки и подсветка"), i18n.t("Линии вокруг окон и кнопок"), "frame"),
+                         (self._wi_colors_box(cfg), i18n.t("Полоска Mico AI"), i18n.t("Полоска по краю экрана"), "bar"),
+                         side=settings_look.PreviewCard(cfg)),
+                    i18n.t("Вид"), "look")
+        # Mico AI: где стоит, когда спит, как запускается и тишина
+        tabs.addTab(page((pos, i18n.t("Положение и сон"), i18n.t("Где стоит Mico AI и когда он засыпает"), "moon"),
+                         (start, i18n.t("Запуск и поведение"), i18n.t("Автозапуск, приветствие, горячая клавиша"), "power"),
+                         (menu, i18n.t("Меню по правому щелчку"), i18n.t("Какие пункты показывать"), "menu"),
+                         (self._wi_rhythm_box(cfg), i18n.t("Тишина и загрузка"), i18n.t("Тихий час и линия нагрузки"), "pulse")),
+                    i18n.t("Mico AI"), "general")
+        # Чат и помощь: фразы, кнопки под ответами, погода, память и подсказки
+        tabs.addTab(page((ph, i18n.t("Свои фразы"), i18n.t("Команды из нескольких шагов"), "chat"),
+                         (btn, i18n.t("Кнопки под чатом"), i18n.t("Что показывать под ответом"), "buttons"),
+                         (smart_a, i18n.t("Погода и приветствие"), i18n.t("Что рассказывать при включении ПК"), "sun"),
+                         (smart_b, i18n.t("Память и перерывы"), i18n.t("Что помнить и когда напоминать"), "layers"),
+                         (helpbox, i18n.t("Помощь по буферу и ошибкам"), i18n.t("Когда Mico AI предлагает помощь сам"), "bolt"),
+                         (memview.MemoryView(), i18n.t("Что Mico AI знает"), i18n.t("Заметки, команды, история и окна — можно удалить"), "layers")),
+                    i18n.t("Чат и помощь"), "functions")
+        self._voice = voice_settings.VoicePage(cfg)                 # голос: озвучка, микрофон, «мико»
+        tabs.addTab(self._voice.pages(), i18n.t("Голос"), "speaker")
         tabs.addTab(page((mod, i18n.t("Модели для общения и экрана"), i18n.t("Какие модели отвечают"), "models"),
-                         (mod2, i18n.t("Скачивание и удаление"), "Загрузить или освободить место", "download")), i18n.t("Модели"), "models")
+                         (mod2, i18n.t("Скачивание и удаление"), i18n.t("Загрузить или освободить место"), "download")),
+                    i18n.t("Модели"), "models")
+        # Система: история и хранение данных
+        tabs.addTab(page((hist, i18n.t("История и поиск"), i18n.t("Сколько хранить и где искать"), "history")),
+                    i18n.t("Система"), "history")
 
+        for lab in self.findChildren(QLabel):          # пояснения «<small>…» — тот же серый стиль подсказок
+            t = lab.text()
+            if t.startswith("<small>") and t.endswith("</small>") and not lab.objectName():
+                lab.setText(t[len("<small>"):-len("</small>")])
+                lab.setObjectName("hint")
+                lab.setWordWrap(True)
         for form in self.findChildren(QFormLayout):
             form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
             form.setVerticalSpacing(6)
@@ -1233,37 +1609,16 @@ class SettingsDialog(QDialog):
         self.status.connect(self.stat.setText)
         self.pulled.connect(self.on_pulled)
         self.pull_progress.connect(self._on_pull_progress)
+        self.pull_finished.connect(self._on_pull_finished)
         self.deleted.connect(self.on_deleted)
         self.models_ready.connect(self._on_models_ready)
         self._refresh_ollama_lists()
-
-    def _live_wave(self, value):
-        """Ползунок двигается — волны меняются сразу, без «Сохранить»."""
-        self.cfg["wave_opacity"] = int(value)
-        glow = getattr(getattr(self.panel, "intel", None), "glow", None)
-        if glow is not None:
-            glow.update()
 
     def _wi_colors_box(self, cfg):
         """Цвета полоски Mico AI: у каждого действия свой. Занятый цвет выбрать нельзя."""
         box = QWidget()
         f = QFormLayout(box)
         self._wi_btns = {}
-        self.wave_op = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.wave_op.setRange(0, 100)
-        self.wave_op.setValue(int(cfg.get("wave_opacity", 85)))
-        self.wave_op.valueChanged.connect(self._live_wave)
-        f.addRow("Прозрачность волн и полосок", self._block(self.wave_op, "wave_opacity"))
-        presets = QWidget()
-        pl = QHBoxLayout(presets)
-        pl.setContentsMargins(0, 0, 0, 0)
-        b_clear = QPushButton("Максимально прозрачные")
-        b_clear.clicked.connect(lambda: self.wave_op.setValue(0))
-        b_solid = QPushButton("Непрозрачные")
-        b_solid.clicked.connect(lambda: self.wave_op.setValue(100))
-        pl.addWidget(b_clear)
-        pl.addWidget(b_solid)
-        f.addRow("", presets)
         cur = intel.state_colors(cfg)
         for key, name in intel.STATE_NAMES.items():
             b = QPushButton(cur[key])
@@ -1271,10 +1626,10 @@ class SettingsDialog(QDialog):
             b.clicked.connect(lambda _=False, k=key: self._pick_wi(k))
             self._wi_btns[key] = b
             self._paint_wi(key, cur[key])
-            f.addRow(name, b)
-        reset = QPushButton("Вернуть цвета по умолчанию")
+            f.addRow(name, self._with_hint(b, self.STATE_HELP.get(key, "Цвет полоски для этого действия.")))
+        reset = QPushButton(i18n.t("Вернуть цвета по умолчанию"))
         reset.clicked.connect(self._reset_wi_colors)
-        f.addRow(reset)
+        f.addRow(self._with_hint(reset, "Вернёт цвета действий к стандартным."))
         self.wi_edge = NoWheelSlider(Qt.Orientation.Horizontal)           # толщина полосок по краям
         self.wi_edge.setRange(intel.EDGE_W_MIN, intel.EDGE_W_MAX)
         self.wi_edge.setValue(intel.edge_band(cfg))
@@ -1284,28 +1639,30 @@ class SettingsDialog(QDialog):
         erow = QHBoxLayout()
         erow.addWidget(self.wi_edge, 1)
         erow.addWidget(self.wi_edge_lbl)
-        f.addRow("Толщина полосок по краям", erow)
-        self.wi_waves = WrapCheck("Свечение ярче, пока Mico AI отвечает")
+        ew = QWidget()
+        ew.setLayout(erow)
+        f.addRow(i18n.t("Толщина полосок по краям"), self._with_hint(ew, "Насколько толстой будет полоска у края экрана: тоньше — незаметнее, толще — заметнее."))
+        self.wi_waves = WrapCheck(i18n.t("Свечение ярче, пока Mico AI отвечает"))
         self.wi_waves.setChecked(intel.waves_on(cfg))
         self.wi_waves.toggled.connect(self._wi_waves_changed)
-        f.addRow(self.wi_waves)
+        f.addRow(self._with_hint(self.wi_waves, "Полоска светится ярче, пока Mico AI отвечает на вопрос."))
         self.wi_wsrc = NoWheelComboBox()
         for key, name in intel.WAVE_SOURCES.items():
             self.wi_wsrc.addItem(name, key)
         self.wi_wsrc.setCurrentIndex(max(0, self.wi_wsrc.findData(cfg.get("wi_wave_source", "mico"))))
         self.wi_wsrc.currentIndexChanged.connect(self._wi_wave_src_changed)
-        f.addRow("Цвет волн", self.wi_wsrc)
+        f.addRow(i18n.t("Цвет волн"), self._with_hint(self.wi_wsrc, "Откуда брать цвета волн: из самого Mico AI или из выбранного набора."))
         self.wi_wbtn = QPushButton()
         self.wi_wbtn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.wi_wbtn.clicked.connect(self._pick_wave)
         self._paint_wave_btn()
-        f.addRow("Свой цвет волн", self.wi_wbtn)
+        f.addRow(i18n.t("Свой цвет волн"), self._with_hint(self.wi_wbtn, "Выбери свой цвет для волн. Он заменит готовый набор."))
         self.wi_theme = NoWheelComboBox()
         for key, (name, _cols, _states) in intel.WAVE_THEMES.items():
             self.wi_theme.addItem(name, key)
         self.wi_theme.setCurrentIndex(max(0, self.wi_theme.findData(cfg.get("wi_wave_theme", intel.WAVE_THEME_DEFAULT))))
         self.wi_theme.currentIndexChanged.connect(self._wi_theme_changed)
-        f.addRow("Готовый набор волн", self.wi_theme)
+        f.addRow(i18n.t("Готовый набор волн"), self._with_hint(self.wi_theme, "Набор цветов для полоски: можно взять готовый вариант."))
         hint = QLabel("Полоска по краям экрана в режиме Mico AI. Цвета у действий не повторяются. "
                       "Волны могут быть цветом Mico AI из персонализации.")
         hint.setObjectName("hint")
@@ -1317,29 +1674,25 @@ class SettingsDialog(QDialog):
         """Тишина по расписанию и загрузка ПК полоской: только в режиме Mico AI."""
         box = QWidget()
         f = QFormLayout(box)
-        self.wi_qon = WrapCheck("Тихий час: в это время Mico AI не начинает разговор сам")
+        self.wi_qon = WrapCheck(i18n.t("Тихий час: в это время Mico AI не начинает разговор сам"))
         self.wi_qon.setChecked(bool(cfg.get("wi_quiet_on", False)))
         self.wi_qon.toggled.connect(lambda on: self.cfg.update(wi_quiet_on=bool(on)))
-        f.addRow(self.wi_qon)
+        f.addRow(self._with_hint(self.wi_qon, "Mico AI сам не начинает разговор в выбранные часы. Ответы на твои вопросы всё равно приходят."))
         self.wi_qfrom, self.wi_qto = QTimeEdit(), QTimeEdit()
-        for edit, key, default, row in ((self.wi_qfrom, "wi_quiet_from", "23:00", "С"),
-                                        (self.wi_qto, "wi_quiet_to", "08:00", "До")):
+        for edit, key, default, row in ((self.wi_qfrom, "wi_quiet_from", "23:00", i18n.t("С")),
+                                        (self.wi_qto, "wi_quiet_to", "08:00", i18n.t("До"))):
             edit.setDisplayFormat("HH:mm")
             edit.setTime(QTime.fromString(str(cfg.get(key) or default), "HH:mm"))
             edit.timeChanged.connect(lambda t, k=key: self.cfg.update({k: t.toString("HH:mm")}))
-            f.addRow(row, edit)
-        hint = QLabel("Через полночь тоже работает: 23:00–08:00. Ответы на твои вопросы тихий час не блокирует.")
+            f.addRow(row, self._with_hint(edit, "Начало тихого часа." if row == i18n.t("С") else "Конец тихого часа."))
+        hint = QLabel(i18n.t("Через полночь тоже работает: 23:00–08:00. Ответы на твои вопросы тихий час не блокирует."))
         hint.setObjectName("hint")
         hint.setWordWrap(True)
         f.addRow(hint)
-        self.wi_lbar = WrapCheck("Загрузка ПК тонкой линией внизу экрана")
+        self.wi_lbar = WrapCheck(i18n.t("Загрузка ПК тонкой линией внизу экрана"))
         self.wi_lbar.setChecked(bool(cfg.get("wi_load_bar", False)))
         self.wi_lbar.toggled.connect(lambda on: self.cfg.update(wi_load_bar=bool(on)))
-        f.addRow(self.wi_lbar)
-        hint2 = QLabel("Линия растёт вместе с нагрузкой процессора. Цвет — как у волн.")
-        hint2.setObjectName("hint")
-        hint2.setWordWrap(True)
-        f.addRow(hint2)
+        f.addRow(self._with_hint(self.wi_lbar, i18n.t("Линия растёт вместе с нагрузкой процессора. Цвет — как у волн.")))
         return box
 
     def _wi_edge_changed(self, v):
@@ -1369,11 +1722,10 @@ class SettingsDialog(QDialog):
     def _paint_wave_btn(self):
         hex_color = "#%02X%02X%02X" % intel.hex_rgb(self.cfg.get("wi_wave_custom"))
         self.wi_wbtn.setText(hex_color)
-        self.wi_wbtn.setStyleSheet(f"background:{hex_color}; color:#201a14; border:1px solid #8a7d6a; "
-                                   "border-radius:10px; padding:4px 12px;")
+        self.wi_wbtn.setStyleSheet(theme.swatch_qss(hex_color))
 
     def _pick_wave(self):
-        c = QColorDialog.getColor(QColor(*intel.hex_rgb(self.cfg.get("wi_wave_custom"))), self, "Цвет волн")
+        c = QColorDialog.getColor(QColor(*intel.hex_rgb(self.cfg.get("wi_wave_custom"))), self, i18n.t("Цвет волн"))
         if not c.isValid():
             return
         self.cfg["wi_wave_custom"] = c.name().upper()
@@ -1388,8 +1740,7 @@ class SettingsDialog(QDialog):
     def _paint_wi(self, key, hex_color):
         b = self._wi_btns[key]
         b.setText(hex_color)
-        b.setStyleSheet(f"background:{hex_color}; color:#201a14; border:1px solid #8a7d6a; "
-                        "border-radius:10px; padding:4px 12px;")
+        b.setStyleSheet(theme.swatch_qss(hex_color))
 
     def _pick_wi(self, key):
         cur = intel.state_colors(self.cfg)
@@ -1399,7 +1750,7 @@ class SettingsDialog(QDialog):
         hex_color = c.name().upper()
         clash = intel.color_clash(cur, key, hex_color)
         if clash:
-            QMessageBox.information(self, "Цвет занят",
+            QMessageBox.information(self, i18n.t("Цвет занят"),
                                     f"Этот цвет уже у действия «{intel.STATE_NAMES[clash]}». "
                                     "Выбери другой: у каждого действия свой цвет.")
             return
@@ -1420,10 +1771,10 @@ class SettingsDialog(QDialog):
         c.setEditable(False)
         names = list(installed)
         if cur and cur not in names:                  # настроенной модели нет на ПК — покажем с пометкой
-            names.insert(0, cur + "  (не скачана)")
+            names.insert(0, cur + i18n.t("  (не скачана)"))
         c.addItems(names)
         if cur:
-            i = c.findText(cur) if cur in names else c.findText(cur + "  (не скачана)")
+            i = c.findText(cur) if cur in names else c.findText(cur + i18n.t("  (не скачана)"))
             if i >= 0:
                 c.setCurrentIndex(i)
         c.setEnabled(bool(names))
@@ -1432,22 +1783,24 @@ class SettingsDialog(QDialog):
     def _style_dialog(self):
         """Оформление окна настроек по цвету Mico AI и теме (в режиме Mico AI — спокойнее, как в macOS)."""
         dark = theme.is_dark(self.cfg)
-        accent_win = theme.windows_accent()
-        Switch.ON = accent_win
+        accent = self.cfg["color"]                    # переключатели и полоска окна — цвет Mico AI (персиковый по умолчанию)
+        Switch.ON = accent
         Switch.OFF = "#4a4a4a" if dark else "#d1d1d6"
+        RoundSlider.ACCENT = accent                   # ползунки — тот же цвет, что переключатели
+        RoundSlider.TRACK = "#46464f" if dark else "#d2d2da"
+        RoundSlider.RING = settings_look.PALETTE[bool(dark)]["card"]
         if hasattr(self, "_tabs"):
-            self._tabs.set_accent(accent_win)
-        if intel.style_of(self.cfg.get("assist_style")) == intel.INTELLIGENCE:
-            self.setStyleSheet(theme.wi_settings_qss(self.cfg["color"], dark) + theme.RESET_QSS)
-        else:
-            self.setStyleSheet(theme.settings_qss(self.cfg["color"], dark) + theme.RESET_QSS)
+            self._tabs.set_accent(accent)
+        self.setStyleSheet(settings_look.qss(dark, accent))
+        self.update()                                 # свечение берёт новый цвет
+        for sl in self.findChildren(RoundSlider):
+            sl.update()
 
     def _paint_accent_btn(self):
         """Кнопка «Цвет Mico AI» показывает сам цвет."""
         hex_color = "#%02X%02X%02X" % intel.hex_rgb(self.cfg["color"])
         self.cbtn.setText(hex_color)
-        self.cbtn.setStyleSheet(f"background:{hex_color}; color:#201a14; border:1px solid #8a7d6a; "
-                                "border-radius:10px; padding:4px 12px;")
+        self.cbtn.setStyleSheet(theme.swatch_qss(hex_color))
 
     def _apply_accent(self):
         """Цвет Mico AI сменили: окно настроек, кнопка цвета, чат, строка Mico AI и волны перекрашиваются сразу,
@@ -1461,14 +1814,13 @@ class SettingsDialog(QDialog):
             self._wi_preview()
 
     def pick(self):
-        c = QColorDialog.getColor(QColor(self.cfg["color"]), self, "Цвет Mico AI")
+        c = QColorDialog.getColor(QColor(self.cfg["color"]), self, i18n.t("Цвет Mico AI"))
         if c.isValid():
             self.cfg["color"] = c.name()
             self._apply_accent()
 
     def live(self):
-        self.cfg["scale"], self.cfg["opacity"] = self.sc.value() / 100, self.op.value() / 100
-        self.cfg["chat_opacity"] = self.chop.value() / 100
+        self.cfg["scale"] = self.sc.value() / 100
         self.blob.apply_config()
         if self.linked.isChecked() and self.csc.value() != self.sc.value():
             self.csc.blockSignals(True)                 # ползунок чата следует за размером Mico AI
@@ -1483,13 +1835,13 @@ class SettingsDialog(QDialog):
         if linked:
             self.csc.setRange(self.sc.minimum(), self.sc.maximum())
             self.csc.setValue(self.sc.value())
-            self.csc_lbl.setText("Размер Mico AI и чата")
-            self.csc.setToolTip("Меняет размер и Mico AI, и чата вместе")
+            self.csc_lbl.setText(i18n.t("Размер Mico AI и чата"))
+            self.csc.setToolTip(i18n.t("Меняет размер и Mico AI, и чата вместе"))
         else:
             self.csc.setRange(60, 200)
             self.csc.setValue(int(round(self.cfg.get("chat_scale", 1.0) * 100)))
-            self.csc_lbl.setText("Размер чата")
-            self.csc.setToolTip("Отдельный размер чата, Mico AI не меняется")
+            self.csc_lbl.setText(i18n.t("Размер чата"))
+            self.csc.setToolTip(i18n.t("Отдельный размер чата, Mico AI не меняется"))
         self.csc.setEnabled(True)
         self.csc.blockSignals(False)
         self.csc_box.refresh()                      # подпись значения, пока сигналы были выключены
@@ -1509,10 +1861,10 @@ class SettingsDialog(QDialog):
     def _phrase_add(self):
         say, do = self.psay.text().strip(), self.pdo.text().strip()
         if not custom.valid(say, do):
-            QMessageBox.information(self, "Фразы", "Заполни обе строки. Фраза — до 60 знаков, шаги — до 300.")
+            QMessageBox.information(self, i18n.t("Фразы"), i18n.t("Заполни обе строки. Фраза — до 60 знаков, шаги — до 300."))
             return
         if len(self._phrases) >= custom.MAX_PHRASES:
-            QMessageBox.information(self, "Фразы", f"Можно добавить не больше {custom.MAX_PHRASES} фраз.")
+            QMessageBox.information(self, i18n.t("Фразы"), f"Можно добавить не больше {custom.MAX_PHRASES} фраз.")
             return
         self._phrases = self._phrases + [{"say": say, "do": do}]
         self.pl.addItem(f"«{say}» → {do}")
@@ -1620,10 +1972,10 @@ class SettingsDialog(QDialog):
             line.addWidget(badge)
         if key:
             self._reg[key] = getattr(widget, "inner", widget)
-            rb = QPushButton("Сброс")
+            rb = QPushButton(i18n.t("Сброс"))
             rb.setObjectName("resetRow")
             rb.setCursor(Qt.CursorShape.PointingHandCursor)
-            rb.setToolTip("Вернуть эту настройку к значению по умолчанию")
+            rb.setToolTip(i18n.t("Вернуть эту настройку к значению по умолчанию"))
             rb.clicked.connect(lambda _=False, k=key: self._reset_key(k))
             line.addWidget(rb)
         v.addLayout(line)
@@ -1631,9 +1983,31 @@ class SettingsDialog(QDialog):
         hint = i18n.t(raw_hint) if raw_hint else None
         if hint:
             hl = QLabel(hint)
-            hl.setObjectName("hint")
+            hl.setObjectName("settingDesc")
             hl.setWordWrap(True)
             v.addWidget(hl)
+        return w
+
+    STATE_HELP = {
+        "listen": "Цвет полоски, пока Mico AI ждёт твоей команды.",
+        "think": "Цвет полоски, пока Mico AI готовит ответ.",
+        "break": "Цвет полоски, когда Mico AI напоминает отдохнуть.",
+        "watch": "Цвет полоски, когда Mico AI наблюдает за работой на экране.",
+        "tip": "Цвет полоски, когда Mico AI предлагает полезный совет.",
+        "warn": "Цвет полоски, когда Mico AI предупреждает о проблеме или опасной команде.",
+    }
+
+    def _with_hint(self, widget, text):
+        """Элемент без своей настройки (кнопка, список, цвет): серое пояснение под ним, как у остальных настроек."""
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(2)
+        v.addWidget(widget)
+        hl = QLabel(text)
+        hl.setObjectName("settingDesc")
+        hl.setWordWrap(True)
+        v.addWidget(hl)
         return w
 
     def _row(self, f, label, widget, key):
@@ -1650,10 +2024,10 @@ class SettingsDialog(QDialog):
         badge = None
         if feat and features.is_beta(feat):
             badge = QLabel("BETA")
-            badge.setStyleSheet("color:#c0392b; font-weight:bold; font-size:11px;")
+            badge.setStyleSheet("color:#c0392b; font-weight:600; font-size:11px;")
             if not features.enabled(feat, self.cfg):
                 box.setEnabled(False)
-                box.setToolTip("Доступно в программе предварительной оценки (⚙ Настройки → Бета)")
+                box.setToolTip(i18n.t("Доступно в программе предварительной оценки (⚙ Настройки → Бета)"))
         return self._block(box, self.NAME2KEY.get(name), badge)
 
     def _reset_key(self, key):
@@ -1664,11 +2038,6 @@ class SettingsDialog(QDialog):
         default = DEFAULTS.get(key)
         if key == "color":
             self._reset_mico_color()
-            return
-        if key == "search_url":
-            name = next((n for n, u in SEARCH_ENGINES.items() if u == default), None)
-            if name:
-                self.se.setCurrentText(name)
             return
         if isinstance(w, QSlider) and isinstance(default, float):     # ползунки в процентах: 1.0 → 100
             w.setValue(int(round(default * 100)))
@@ -1683,7 +2052,7 @@ class SettingsDialog(QDialog):
             self.gl.blockSignals(True)
             item.setCheckState(Qt.CheckState.Unchecked)
             self.gl.blockSignals(False)
-            QMessageBox.information(self, "Приветствие", f"Можно выбрать не больше {greeting.MAX_ITEMS} пунктов.")
+            QMessageBox.information(self, i18n.t("Приветствие"), f"Можно выбрать не больше {greeting.MAX_ITEMS} пунктов.")
         self._greet_count()
 
     def _checked_ids(self):
@@ -1705,7 +2074,7 @@ class SettingsDialog(QDialog):
             self.clist.blockSignals(True)
             item.setCheckState(Qt.CheckState.Unchecked)
             self.clist.blockSignals(False)
-            QMessageBox.information(self, "Кнопки", f"Можно выбрать не больше {chips.MAX_CHIPS} кнопок.")
+            QMessageBox.information(self, i18n.t("Кнопки"), f"Можно выбрать не больше {chips.MAX_CHIPS} кнопок.")
         self._update_cnt()
 
     def _filter_chips(self, text):
@@ -1717,13 +2086,12 @@ class SettingsDialog(QDialog):
     def _reset_usage(self):
         chips.reset(self.cfg)
         save_cfg(self.cfg)
-        QMessageBox.information(self, "Кнопки", "Привычки сброшены. Mico AI начнёт учиться заново.")
+        QMessageBox.information(self, i18n.t("Кнопки"), i18n.t("Привычки сброшены. Mico AI начнёт учиться заново."))
 
     def _save_chips(self):
         self.cfg.update(chips_mode=self.cmode.currentData(), chips_count=self.ccount.value(),
                         chips_hide_on_send=self.chide.isChecked(),
-                        anim_sleep_fps=self.sleep_fps.currentData() or 60,
-                        wave_opacity=self.wave_op.value(),
+                        anim_sleep_fps=self.sleep_fps.currentData() or 20,
                         chips_pinned=self._checked_ids()[:chips.MAX_CHIPS])
 
     def reset_settings(self):
@@ -1740,7 +2108,7 @@ class SettingsDialog(QDialog):
         self.cfg.update(keep)
         save_cfg(self.cfg)
         self.orig = dict(self.cfg)                   # reject() не должен откатить сброс
-        QMessageBox.information(self, "Mico AI", "Настройки сброшены. Перезапусти Mico AI, чтобы всё применилось.")
+        QMessageBox.information(self, "Mico AI", i18n.t("Настройки сброшены. Перезапусти Mico AI, чтобы всё применилось."))
         super().reject()
 
     def _fit_widgets(self):
@@ -1763,7 +2131,40 @@ class SettingsDialog(QDialog):
         w, h = next(((w, h) for k, _, (w, h) in SETTINGS_SIZES if k == key), (640, 720))
         scr = QGuiApplication.primaryScreen().availableGeometry()
         self.resize(min(w, scr.width() - 40), min(h, scr.height() - 80))
-        self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)   # на весь экран
+
+    def paintEvent(self, e):
+        """Свечение рамки: рисуем здесь, а не эффектом тени. В развёрнутом окне рамка во весь экран — свечения нет."""
+        if self.isMaximized():
+            return
+        p = QPainter(self)
+        settings_look.paint_glow(p, QRectF(self.rect()).adjusted(16, 16, -16, -16), QColor(self.cfg["color"]))
+        p.end()
+
+    def _toggle_max(self):
+        """Кнопка «во весь экран» в шапке: переключает обычный и развёрнутый вид."""
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+
+    def mousePressEvent(self, e):
+        """Окно без системной шапки: тянем его за верхнюю полосу (кнопки и поиск работают как обычно)."""
+        if e.button() == Qt.MouseButton.LeftButton and e.position().y() < 72 and not self.isMaximized():
+            self._drag = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            e.accept()
+            return
+        super().mousePressEvent(e)
+
+    def mouseMoveEvent(self, e):
+        if self._drag is not None:
+            self.move(e.globalPosition().toPoint() - self._drag)
+            e.accept()
+            return
+        super().mouseMoveEvent(e)
+
+    def mouseReleaseEvent(self, e):
+        self._drag = None
+        super().mouseReleaseEvent(e)
 
     def _menu_changed(self, _item=None):
         self.mcnt.setText(f"Показано: {min(len(self._menu_ids()), self.mmax.value())} из {self.mmax.value()} "
@@ -1798,47 +2199,83 @@ class SettingsDialog(QDialog):
         self.cfg["theme"] = self.th.currentData()
         self.hooks.apply_theme()
 
-    # ----- модели Ollama -----
+    # ----- модели Mico AI -----
     def pull(self):
-        name = self.pull_pick.currentText().strip() if self.pull_pick.isEnabled() else ""
+        if not self.pull_pick.isEnabled() or self.pull_pick.currentIndex() < 0:
+            return
+        name = str(self.pull_pick.currentData() or self.pull_pick.currentText()).strip()
         if not name or name.startswith("──"):          # заголовок раздела выбрать нельзя
             return
+        import brain as _brain
+        tiers = {t["id"]: t for t in _brain.chat_tiers()}
+        rec = _brain.recommended_chat_id(brain_ram_gb())
+        if name in tiers and name != rec:              # не та модель для этой памяти: предупреждаем, решает человек
+            ram = brain_ram_gb()
+            if QMessageBox.question(
+                    self, i18n.t("Скачать модель"),
+                    f"Для этого компьютера ({ram:.0f} ГБ памяти) лучше подходит «{tiers[rec]['label']}». "
+                    f"«{tiers[name]['label']}» может работать медленнее или отвечать хуже. Всё равно скачать?") \
+                    != QMessageBox.StandardButton.Yes:
+                return
         self.pull_btn.setEnabled(False)
+        self._pull_err = ""
+        self._on_pull_progress(0, 0)                   # полоска сразу бегает: видно, что загрузка началась
+        self.pull_lbl.setText(f"Начинаю скачивание {name}…")
+
+        def status(msg):
+            if msg.startswith(i18n.t("Ошибка")) or i18n.t("прервалась") in msg:
+                self._pull_err = msg                   # ошибку запоминаем, чтобы показать рядом с кнопкой
+            self.status.emit(msg)
 
         def work():
+            ok = False
             try:
-                ok = pull_model(name, self.status.emit, self.pull_progress.emit)
+                ok = bool(pull_model(name, status, self.pull_progress.emit))
+            except Exception as e:
+                self._pull_err = f"Ошибка: {e}"
             finally:
-                self.pull_progress.emit(0, 0)            # прячем полоску даже при ошибке
+                self.pull_finished.emit(ok)            # прячем полоску или показываем ошибку, даже при сбое
             if ok:
                 self.status.emit(f"✓ Готово: {name}")
                 self.pulled.emit(name)
         threading.Thread(target=work, daemon=True).start()
         self.status.emit(f"Скачиваю {name}…")
 
+    def _on_pull_finished(self, ok):
+        """Скачивание закончилось: кнопка снова доступна; при ошибке причина остаётся на экране."""
+        self.pull_btn.setEnabled(True)
+        self.pull_bar.hide()
+        if ok:
+            self.pull_lbl.hide()
+        else:
+            self.pull_lbl.setText(self._pull_err or i18n.t("Не получилось скачать модель. Проверь интернет и попробуй ещё раз."))
+            self.pull_lbl.show()
+
     def _on_pull_progress(self, done, total):
         """Полоска: сколько скачано из скольких мегабайт и сколько процентов."""
-        if total <= 0:
-            self.pull_bar.hide()
-            self.pull_lbl.hide()
-            self.pull_btn.setEnabled(True)
+        if total <= 0:                                # размер ещё неизвестен: полоска бегает, пока Ollama не ответит
+            self.pull_bar.setRange(0, 0)
+            self.pull_bar.show()
+            self.pull_lbl.setText(i18n.t("Жду ответа от сервера моделей…"))
+            self.pull_lbl.show()
             return
+        self.pull_bar.setRange(0, 100)
         done = max(0, min(done, total))               # скачано не может быть больше размера модели и отрицательным
         pct = 100 if done >= total else done * 100 // total   # 99.9% не показываем как 99
         self.pull_bar.setValue(pct)
         text = f"{done / 1e6:.0f} из {total / 1e6:.0f} МБ · {pct}%"
-        if pct >= 100:                                # всё скачано: Ollama проверяет и ставит модель
-            text += " · проверяю…"
+        if pct >= 100:                                # известные слои скачаны, но Ollama ещё не подтвердила конец
+            text += i18n.t(" · жду подтверждения…")
         self.pull_lbl.setText(text)
         self.pull_bar.show()
         self.pull_lbl.show()
 
     def _delete_ollama(self, name):
-        """Удаление модели Ollama с подтверждением: место на диске освобождается, скачать снова можно в любой момент."""
+        """Удаление модели Mico AI с подтверждением: место на диске освобождается, скачать снова можно в любой момент."""
         name = (name or "").strip()
         if not name:
             return
-        if QMessageBox.question(self, "Удалить модель",
+        if QMessageBox.question(self, i18n.t("Удалить модель"),
                                 f"Удалить «{name}» с компьютера? Скачать её снова можно в любой момент.") \
                 != QMessageBox.StandardButton.Yes:
             return
@@ -1850,7 +2287,7 @@ class SettingsDialog(QDialog):
                 self.status.emit(f"✓ Удалена: {name}")
                 self.deleted.emit(name)
             else:
-                self.status.emit(f"Не получилось удалить «{name}». Проверь, что Ollama запущена.")
+                self.status.emit(f"Не получилось удалить «{name}». Попробуй ещё раз.")
         threading.Thread(target=work, daemon=True).start()
 
     def _refresh_ollama_lists(self):
@@ -1871,44 +2308,50 @@ class SettingsDialog(QDialog):
     @staticmethod
     def _set_model_items(c, installed, current):
         """Заполняет список установленных моделей, сохраняя выбранную. Если её нет на ПК — помечаем «(не скачана)»."""
-        cur = (current or "").replace("  (не скачана)", "").strip()
+        cur = (current or "").replace(i18n.t("  (не скачана)"), "").strip()
         names = list(installed)
         if cur and cur not in names:
-            names.insert(0, cur + "  (не скачана)")
+            names.insert(0, cur + i18n.t("  (не скачана)"))
         c.blockSignals(True)
         c.clear()
         c.addItems(names)
         if cur:
-            i = c.findText(cur) if cur in names else c.findText(cur + "  (не скачана)")
+            i = c.findText(cur) if cur in names else c.findText(cur + i18n.t("  (не скачана)"))
             if i >= 0:
                 c.setCurrentIndex(i)
         c.setEnabled(bool(names))
         c.blockSignals(False)
 
     def _fill_pull_pick(self, installed):
-        """Список для скачивания: отдельно модели для чата и отдельно для экрана; установленные не показываем."""
+        """Список для скачивания: только модели, которые мы подобрали под память (для чата) и для экрана.
+        Уже скачанные не показываем. Рекомендованная для этого ПК модель выбрана сразу."""
         if not hasattr(self, "pull_pick"):
             return
         import brain as _brain
         have = set(installed)
-        groups = (("Для чата", _brain.SUGGEST_TEXT), ("Для экрана", _brain.SUGGEST_VISION))
+        chat = [(t["id"], t["label"]) for t in _brain.chat_tiers()]
+        vision = [(n, n) for n in _brain.SUGGEST_VISION]
+        rec = _brain.recommended_chat_id(brain_ram_gb())
         self.pull_pick.blockSignals(True)
         self.pull_pick.clear()
         model = self.pull_pick.model()
         first = None
-        for title, names in groups:
-            todo = [n for n in names if n not in have]
+        chosen = None
+        for title, items in ((i18n.t("Для чата"), chat), (i18n.t("Для экрана"), vision)):
+            todo = [(mid, label) for mid, label in items if mid not in have]
             if not todo:
                 continue
             self.pull_pick.addItem(f"── {title} ──")
             model.item(self.pull_pick.count() - 1).setEnabled(False)   # заголовок видно, но не выбирается
-            for n in todo:
-                self.pull_pick.addItem(n)
+            for mid, label in todo:
+                self.pull_pick.addItem(label, mid)
                 if first is None:
                     first = self.pull_pick.count() - 1
+                if mid == rec:
+                    chosen = self.pull_pick.count() - 1
         self.pull_pick.setEnabled(first is not None)
         if first is not None:
-            self.pull_pick.setCurrentIndex(first)
+            self.pull_pick.setCurrentIndex(chosen if chosen is not None else first)
         self.pull_pick.blockSignals(False)
 
     def _fill_del_pick(self, names):
@@ -1947,7 +2390,7 @@ class SettingsDialog(QDialog):
                     f.write(traceback.format_exc() + "\n")
             except OSError:
                 pass
-            QMessageBox.warning(self, "Настройки", f"Не получилось сохранить настройки: {e}\n\n"
+            QMessageBox.warning(self, i18n.t("Настройки"), f"Не получилось сохранить настройки: {e}\n\n"
                                 "Подробности записаны в crash.log в папке Mico AI (%APPDATA%\\Mico).")
             return
         if done:
@@ -1955,23 +2398,22 @@ class SettingsDialog(QDialog):
 
     def _apply(self):
         self._save_chips()
+        self._voice.apply(self.cfg)                       # вкладка «Голос»
         self.cfg.update(menu_items=self._menu_ids(), menu_max=self.mmax.value())
-        self.cfg.update(language=self.lang.currentData() or "ru")
         self.cfg.update(quiet_mode=self.quiet.isChecked(), update_check=self.updchk.isChecked())
         self.cfg.update(sleep_after_min=self.sleep_min.value())
-        self.cfg["chat_opacity"] = self.chop.value() / 100          # ползунок сохраняем всегда, не только при движении других
         self.cfg.update(proactive_breaks=self.pbr.isChecked(),
                         proactive_break_min=self.pbr_min.value())
         self.cfg.update(custom_phrases=list(self._phrases))
         self.cfg.update(text_model=self.tm.currentText().strip(), vision_model=self.vm.currentText().strip() or VISION_MODEL,
-                        greet_on_start=self.greet.isChecked(), retention_days=self.keep.currentData(),
-                        search_url=SEARCH_ENGINES.get(self.se.currentText(), SEARCH_ENGINES["Google"]))
+                        greet_on_start=self.greet.isChecked(), retention_days=self.keep.currentData())
+        self.cfg.update(language=self.lang.currentData() or "en")
         self.cfg.update(chat_outline=self.outline.isChecked(), chat_linked=self.linked.isChecked(),
                         chat_scale=self.cfg.get("chat_scale", 1.0), chat_ratio=self.cfg.get("chat_ratio", 1.0),
-                        weather_on="weather" in self._greet_ids(), greet_items=self._greet_ids(),
+                        weather_on="weather" in self._greet_ids() and self.wstart.isChecked(),
+                        weather_on_start=self.wstart.isChecked(), greet_items=self._greet_ids(),
                         city=self.city.text().strip(), memory_on=self.mem.isChecked(),
                         loc_consent=True if self.locc.isChecked() else (False if self.cfg.get("loc_consent") is not None else None))
-        commands.SEARCH_URL = self.cfg["search_url"]
         # включённый флажок всегда переписываем задачу: так чинится и отсутствующая, и устаревшая (старый путь)
         # ошибка автозапуска не должна мешать сохранить остальные настройки: сохраняем сначала, сообщаем потом
         try:
@@ -1983,10 +2425,10 @@ class SettingsDialog(QDialog):
         try:
             save_cfg(self.cfg)
         except OSError as e:                       # не записали — окно не закрываем, чтобы пользователь увидел причину
-            QMessageBox.warning(self, "Настройки", f"Не удалось записать настройки: {e}")
+            QMessageBox.warning(self, i18n.t("Настройки"), f"Не удалось записать настройки: {e}")
             return False
         if not ok:
-            QMessageBox.warning(self, "Автозапуск", msg)
+            QMessageBox.warning(self, i18n.t("Автозапуск"), msg)
         return True
 
     def reject(self):
@@ -2005,6 +2447,7 @@ class Bus(QObject):
 
 
 def main():
+    _trace("main() начат")
     if "--autostart" in sys.argv:                # при входе в Windows даём рабочему столу загрузиться
         time.sleep(10)
     try:                                       # 1 мс точность таймеров Windows — плавные кадры
@@ -2013,7 +2456,7 @@ def main():
     except Exception:
         pass
     app = QApplication(sys.argv)
-    theme.load_fonts()                       # Inter из assets/fonts — один шрифт на всё Mico AI
+    theme.load_fonts()                       # основной текст Segoe UI Variable, заголовки Nunito Bold
     app.setFont(theme.app_font())
     app.setStyleSheet(theme.FONT_QSS)        # и в стилях тоже: иначе виджеты берут системный шрифт
     from PyQt6.QtCore import QLibraryInfo, QLocale, QTranslator
@@ -2040,7 +2483,7 @@ def main():
     existed = os.path.exists(CFG_PATH)           # была ли уже установка (для «что нового»)
     _stage("запуск main()")
     cfg, store = load_cfg(), Store()
-    i18n.set_language(cfg.get("language", "ru"))           # язык интерфейса из настроек
+    i18n.set_language(cfg.get("language", "en"))   # язык из настроек: английский по умолчанию
     if version.BUILD_CHANNEL == "stable" and cfg.get("update_channel") != "stable":
         cfg["update_channel"] = "stable"                 # стабильная сборка всегда на стабильном канале
         save_cfg(cfg)
@@ -2054,7 +2497,6 @@ def main():
     if problems:
         wi_notice = "\n".join(filter(None, [wi_notice] + problems))
     store.purge(cfg["retention_days"])
-    commands.SEARCH_URL = cfg["search_url"]
     commands.warmup()                           # заранее читаем список приложений из «Пуска»
     tracker = Tracker(store, cfg)
     tracker.start()
@@ -2071,7 +2513,7 @@ def main():
     panel = Panel(brain, blob, cfg)
     if wi_notice:
         QTimer.singleShot(4000, lambda: panel.say(wi_notice))
-    _wi_chat = getattr(getattr(panel, "intel", None), "wichat", None)
+    _wi_chat = getattr(getattr(panel, "intel", None), "aichat", None)
     if _wi_chat is not None:
         _wi_chat.on_draft = lambda _t: save_cfg(cfg)      # черновик чата Mico AI сохраняется в настройках
     _stage("окно чата готово")
@@ -2082,25 +2524,28 @@ def main():
     brain.notify = panel.reminder.emit
     brain.save_cfg = lambda: save_cfg(cfg)
     reminders.bind(store)                    # напоминания — в зашифрованном хранилище
+    memview.bind(store)                      # экран «Что Mico AI знает»
 
     def on_hotkey(hid):
         if hid == 1:                                         # F8: открывает обычный чат Mico AI
             if intel_ctl is not None and intel_ctl.on():
-                intel_ctl.toggle_wichat()                    # режим Mico AI: чат Mico AI
+                intel_ctl.toggle_aichat()                    # режим Mico AI: чат Mico AI
             else:
                 panel.toggle()                               # обычный режим: чат рядом с Mico AI
         elif hid == 2:                                       # Mico AI: «Что на экране?»
             intel_ctl.screen_hotkey()
         elif hid == 3:                                       # Mico AI: «Помочь с окном»
             intel_ctl.window_hotkey(active_title())
+        elif hid == 4 and intel_ctl is not None:             # голос: начать или закончить запись
+            intel_ctl.voice.toggle_listen()
     bus.hotkey.connect(on_hotkey)
 
     def offer_update(info):
         """Новая версия: спрашиваем один раз за запуск. Mico AI только открывает страницу, скачивать — тебе."""
         if cfg.get("quiet_mode"):
             return
-        if _box(QMessageBox.Icon.Information, "Новая версия Mico AI", updatecheck.offer_text(info),
-                "Открыть страницу", "Позже"):
+        if _box(QMessageBox.Icon.Information, i18n.t("Новая версия Mico AI"), updatecheck.offer_text(info),
+                i18n.t("Открыть страницу"), i18n.t("Позже")):
             webbrowser.open(info["url"])
     bus.update_found.connect(offer_update)
 
@@ -2125,24 +2570,36 @@ def main():
             return ""
     hk = hotkeys.HotkeyThread({1: "f8",
                                2: cfg.get("hotkey_screen", intel.SCREEN_KEY),
-                               3: cfg.get("hotkey_window", intel.WINDOW_KEY)}, bus.hotkey.emit)
+                               3: cfg.get("hotkey_window", intel.WINDOW_KEY),
+                               4: cfg.get("hotkey_voice", "ctrl+alt+v")}, bus.hotkey.emit)
     hk.start()
 
     hk.ready.wait(3)
     if hk.failed:
-        bus.info.emit("Не получилось назначить горячую клавишу: " + ", ".join(hk.failed) +
-                      ". Проверь сочетание в ⚙ Настройки → Поведение или его уже занимает другая программа.")
+        bus.info.emit(i18n.t("Не получилось назначить горячую клавишу: ") + ", ".join(hk.failed) +
+                      i18n.t(". Проверь сочетание в ⚙ Настройки → Поведение или его уже занимает другая программа."))
     reminders.restore(brain.notify)          # напоминания, поставленные до перезапуска
     brain.last_hwnd = lambda: watcher.last_hwnd or tracker.last_hwnd
     brain.clip_text = lambda: QGuiApplication.clipboard().text()
     brain.on_command = lambda q: (chips.record(q, cfg), save_cfg(cfg))     # учимся на кнопках и командах
-    blob.clicked.connect(panel.toggle)
-    blob.slept.connect(panel.hide_smooth)                    # заснул — чат прячется
+    def _blob_clicked():
+        if intel_ctl is not None and intel_ctl.voice_mode:      # в голосовом режиме чат не открываем
+            return
+        if intel_ctl is not None and intel_ctl.on():            # режим Mico AI: единственный чат — чат Mico AI
+            intel_ctl.toggle_aichat()
+        else:
+            panel.toggle()
+    blob.clicked.connect(_blob_clicked)
+    blob.slept.connect(lambda: None if (intel_ctl is not None and intel_ctl.on()) else panel.hide_smooth())   # заснул — обычный чат прячется
     # проснулся — чат возвращается, но не раньше, чем Mico AI приземлится после прыжка (иначе чат налезает на него)
-    blob.woke.connect(lambda: QTimer.singleShot(blob.WAKE_SETTLE_MS, panel.show_near))
+    def _blob_woke():
+        if intel_ctl is None or not intel_ctl.on():             # обычный чат возвращается только вне режима Mico AI
+            QTimer.singleShot(blob.WAKE_SETTLE_MS, panel.show_near)
+    blob.woke.connect(_blob_woke)
     blob.can_sleep = lambda: not (panel.busy or panel.inp.hasFocus() or panel.inp.text()
                                   or (panel.isVisible() and panel.underMouse())
-                                  or (intel_ctl is not None and intel_ctl.wichat.isVisible()))   # открыт чат Mico AI — не спим
+                                  or (intel_ctl is not None and intel_ctl.aichat.isVisible()))
+                                  # открыт чат Mico AI или голосовой режим — не спим
     intel_ctl = intel_ui.Intel(cfg, blob, panel)              # режим Windows Intelligence (по умолчанию выключен)
     panel.intel = intel_ctl
     panel.busy_changed.connect(intel_ctl.busy)
@@ -2169,10 +2626,6 @@ def main():
                 pass
     help_t.timeout.connect(help_tick)
     help_t.start(intel.ERROR_CHECK_MS)
-    sleep_isl = sleep_island.SleepIsland(cfg)                # спящий Mico AI — островок сверху по центру, по нажатию просыпается
-    blob.slept.connect(lambda: (sleep_isl.show_from(blob), blob.hide()))   # во сне — чёрный остров сверху по центру
-    sleep_isl.wake.connect(lambda: (blob.show(), blob.wake()))
-    blob.awake.connect(lambda: sleep_isl.retract_to(blob))                # проснулся по любой причине — остров втягивается
     blob.slept.connect(lambda: intel_ctl.glow.set_muted(True))            # во сне волны внизу гаснут
     blob.awake.connect(lambda: intel_ctl.glow.set_muted(False))           # проснулся — волны возвращаются
     blob.slept.connect(intel_ctl.on_sleep)               # в Intelligence Mico AI во сне исчезает, а не уходит в угол
@@ -2207,7 +2660,9 @@ def main():
         dlg.exec()
         panel.refresh_chips()                       # новые кнопки видны сразу, даже если чат открыт
 
-    blob.settings_requested.connect(open_settings)       # двойной щелчок по Mico AI — настройки
+    blob.settings_requested.connect(lambda: None if (intel_ctl is not None and intel_ctl.voice_mode) else open_settings())
+    intel_ctl.voice_dock.all_settings.connect(open_settings)      # «Все настройки Mico AI» в голосовом режиме   # двойной щелчок — настройки, но не в голосовом режиме
+    panel.settings_requested.connect(open_settings)              # «Настройки Mico AI» внизу бокового меню чата
 
     def menu_action(item, m):
         """Один пункт меню. Пункты с галочкой отражают текущее состояние."""
@@ -2231,17 +2686,17 @@ def main():
         elif item == "tour":
             a.triggered.connect(lambda *_: show_tour())
         elif item == "env":
-            a.triggered.connect(lambda *_: QMessageBox.information(None, "Окружение", brain.environment()))
+            a.triggered.connect(lambda *_: QMessageBox.information(None, i18n.t("Окружение"), brain.environment()))
         elif item == "about":
             ch = cfg.get("update_channel", "stable")
-            a.setText(f"ℹ Mico AI {version.display_version(ch)}")
+            a.setText(f"Mico AI {version.display_version(ch)}")
             a.triggered.connect(lambda *_: QMessageBox.information(
                 None, "Mico AI", f"Версия {version.display_version(ch)}.\n\nИстория изменений: CHANGELOG.md\n"
                               f"Политика приватности: PRIVACY.md"))
         elif item == "uninstall":
             a.triggered.connect(lambda *_: installer.uninstall(app))
         elif item == "exit":
-            a.triggered.connect(lambda *_: app.quit())
+            a.triggered.connect(lambda *_: (ollama_ctl.stop_ollama(), app.quit()))   # Выход: закрываем и Ollama, чтобы не держать память
         return a
 
     def menu(pos):
@@ -2270,6 +2725,14 @@ def main():
     except OSError:
         pass
     QTimer.singleShot(4000, lambda: autostart.repair_if_outdated())   # старая задача Планировщика → ключ Run
+    # Ollama поднимаем вместе с Mico, если её ещё нет: в фоне, окно не ждёт
+    if cfg.get("llm_backend", "ollama") != "builtin":                 # Ollama нужна только в режиме Ollama
+        threading.Thread(target=ollama_ctl.ensure_running, daemon=True).start()
+    else:                                                             # встроенная модель: Mico проверяет видеокарту в фоне
+        import local_llm, model_store
+        model_file = model_store.path_for(cfg.get("text_model") or "")
+        if model_file and os.path.isfile(model_file):
+            local_llm.prepare_async(model_file)
 
     def takeover_check():                       # если запустился новый экземпляр — этот уходит
         try:
@@ -2344,11 +2807,13 @@ def main():
             panel.show_near(activate=False)
             panel.say(hello())
         ids = cfg.get("greet_items", [])
+        if not cfg.get("weather_on_start", True):                    # погоду при запуске выключили в настройках
+            ids = [i for i in ids if i != "weather"]
         if "weather" in ids and cfg.get("loc_consent") is None:      # спрашиваем один раз
-            ok = _box(QMessageBox.Icon.Question, "Геопозиция для погоды",
+            ok = _box(QMessageBox.Icon.Question, i18n.t("Геопозиция для погоды"),
                       "Mico AI может узнать твою геопозицию, чтобы сообщать погоду.\n\n"
                       "Windows сама покажет запрос доступа. Данные используются только для погоды. "
-                      "Если откажешься — возьму город из настроек.", "Разрешить", "Не сейчас")
+                      "Если откажешься — возьму город из настроек.", i18n.t("Разрешить"), i18n.t("Не сейчас"))
             cfg["loc_consent"] = bool(ok)
             save_cfg(cfg)
         sync, jobs = greeting.plan(ids, cfg, store)
@@ -2379,15 +2844,17 @@ def main():
             panel.say(text)
 
     QTimer.singleShot(8000, brain.start_digests)                                                 # пересказ прошлых дней, в фоне
-    if cfg["greet_on_start"] and not relaunch and not cfg.get("quiet_mode"):
+    # Первый запуск: начальная настройка сама объясняет всё, поэтому ни приветствие, ни чат поверх неё не открываем.
+    first_run = not cfg.get("tour_done")
+    if cfg["greet_on_start"] and not relaunch and not cfg.get("quiet_mode") and not first_run:
         QTimer.singleShot(700, greet)
     def open_chat_on_start():
-        """При запуске Mico AI сразу открывает чат: и в обычном режиме, и в режиме Intelligence."""
+        """При запуске Mico AI сразу открывает чат. В режиме Intelligence чат не открываем:
+        Mico по умолчанию голосовой, и текстовый чат поверх него только мешал бы."""
         if intel_ctl.on():
-            intel_ctl.show_wichat(activate=False)
-        else:
-            panel.show_near(activate=False)
-    if not relaunch:
+            return
+        panel.show_near(activate=False)
+    if not relaunch and not first_run:
         QTimer.singleShot(900, open_chat_on_start)
     QTimer.singleShot(2600, whats_new)
     QTimer.singleShot(7000, start_update_check)     # после приветствия, в фоне
@@ -2396,18 +2863,27 @@ def main():
         panel.show_near(activate=False)
         panel.show_html(capabilities.html_tour())
 
-    def show_onboarding():
-        """Первый запуск: коротко, что умеет Mico AI, и выбор цвета. Один раз."""
-        import onboarding
-        dlg = onboarding.OnboardingDialog(cfg)
-        dlg.exec()
-        cfg["color"] = dlg.color
-        cfg["tour_done"] = True
-        save_cfg(cfg)
+    def recolor(hex_color):
+        """Цвет Mico AI и его чата меняется сразу, пока пользователь выбирает (предпросмотр в начальной настройке)."""
+        cfg["color"] = hex_color
         blob.update()
         panel.theme()
         if panel.intel:
             panel.intel.restyle()
+
+    # цвет из палитры: Mico уже покрутился и сменил цвет — сохраняем и перекрашиваем чат
+    blob.color_set.connect(lambda hex_color: (recolor(hex_color), save_cfg(cfg)))
+
+    def show_onboarding():
+        """Первый запуск: коротко, что умеет Mico AI, и выбор цвета. Один раз."""
+        import onboarding
+        dlg = onboarding.OnboardingDialog(cfg, on_color=recolor)
+        dlg.exec()
+        recolor(dlg.color)
+        cfg["tour_done"] = True
+        save_cfg(cfg)
+        if intel_ctl is not None and intel_ctl.on():
+            intel_ctl.intro_voice()          # после знакомства: Mico вылетает из угла и влетает в голосовой бар
 
     def maybe_tour():
         """Знакомство один раз при первом запуске (если не режим тишины)."""
@@ -2416,7 +2892,19 @@ def main():
         show_onboarding()
     QTimer.singleShot(9000, maybe_tour)
     _stage("цикл событий запущен")
-    sys.exit(app.exec())
+    code = app.exec()
+    try:
+        store.db.close()                # всё уже записано (commit после каждой записи) — закрываем базу аккуратно
+    except Exception:
+        pass
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
+    # Выход сразу, без очистки интерпретатора: фоновые потоки (экран, горячие клавиши, звук) при обычном выходе
+    # ещё работают во время очистки и держат файлы распакованной программы — отсюда «Failed to remove temporary directory _MEI…».
+    os._exit(code)
 
 
 if __name__ == "__main__":

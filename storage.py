@@ -44,6 +44,9 @@ class Store:
         self.db.execute("CREATE TABLE IF NOT EXISTS chat(ts INTEGER, role TEXT, text BLOB)")  # журнал разговора
         self.db.execute("CREATE INDEX IF NOT EXISTS i_chat ON chat(ts)")
         self.db.execute("CREATE TABLE IF NOT EXISTS day_summary(day TEXT PRIMARY KEY, text BLOB, ts INTEGER)")  # пересказ дня
+        self.db.execute("CREATE TABLE IF NOT EXISTS convs(id INTEGER PRIMARY KEY AUTOINCREMENT, title BLOB, summary BLOB, updated INTEGER)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS conv_msgs(id INTEGER PRIMARY KEY AUTOINCREMENT, conv INTEGER, ts INTEGER, role TEXT, text BLOB)")
+        self.db.execute("CREATE INDEX IF NOT EXISTS i_conv ON conv_msgs(conv, ts)")   # чаты: недавние разговоры с Mico AI
         self.db.execute("CREATE TABLE IF NOT EXISTS index_items(k TEXT PRIMARY KEY, kind TEXT, name BLOB, path BLOB, mtime INTEGER, size INTEGER)")
         self.db.commit()
 
@@ -104,6 +107,72 @@ class Store:
         with self.lock:
             self.db.execute("INSERT INTO chat VALUES(?,?,?)", (int(ts), str(role), self._enc(text[:2000])))
             self.db.commit()
+
+    # ---- чаты: отдельные разговоры (недавние чаты, поиск, сводка для памяти) ----
+    def conv_new(self, title, ts):
+        with self.lock:
+            cur = self.db.execute("INSERT INTO convs(title, summary, updated) VALUES(?,?,?)",
+                                  (self._enc(title[:60]), self._enc(""), int(ts)))
+            self.db.commit()
+            return cur.lastrowid
+
+    def conv_add_msg(self, conv, ts, role, text):
+        with self.lock:
+            cur = self.db.execute("INSERT INTO conv_msgs(conv, ts, role, text) VALUES(?,?,?,?)",
+                                  (int(conv), int(ts), str(role), self._enc(text[:4000])))
+            self.db.execute("UPDATE convs SET updated=? WHERE id=?", (int(ts), int(conv)))
+            self.db.commit()
+            return cur.lastrowid
+
+    def conv_messages(self, conv, limit=200):
+        """Реплики чата, от старых к новым (последние limit)."""
+        with self.lock:
+            rows = self.db.execute("SELECT id, ts, role, text FROM conv_msgs WHERE conv=? ORDER BY id DESC LIMIT ?",
+                                   (int(conv), int(limit))).fetchall()
+        return [(rid, ts, role, self.f.decrypt(t).decode()) for rid, ts, role, t in reversed(rows)]
+
+    def conv_list(self, limit=40):
+        """Недавние чаты: (id, название, время последнего сообщения), новые сверху."""
+        with self.lock:
+            rows = self.db.execute("SELECT id, title, updated FROM convs ORDER BY updated DESC LIMIT ?",
+                                   (int(limit),)).fetchall()
+        return [(cid, self.f.decrypt(t).decode(), upd) for cid, t, upd in rows if t is not None]
+
+    def conv_title(self, conv):
+        with self.lock:
+            row = self.db.execute("SELECT title FROM convs WHERE id=?", (int(conv),)).fetchone()
+        return self.f.decrypt(row[0]).decode() if row and row[0] else ""
+
+    def conv_set_title(self, conv, title):
+        with self.lock:
+            self.db.execute("UPDATE convs SET title=? WHERE id=?", (self._enc(title[:60]), int(conv)))
+            self.db.commit()
+
+    def conv_summary(self, conv):
+        with self.lock:
+            row = self.db.execute("SELECT summary FROM convs WHERE id=?", (int(conv),)).fetchone()
+        return self.f.decrypt(row[0]).decode() if row and row[0] else ""
+
+    def conv_set_summary(self, conv, text):
+        with self.lock:
+            self.db.execute("UPDATE convs SET summary=? WHERE id=?", (self._enc(text[:1200]), int(conv)))
+            self.db.commit()
+
+    def conv_search(self, q, limit=40):
+        """Поиск по всем чатам: по названиям и по тексту сообщений. Возвращает (чат, реплика, фрагмент)."""
+        needle = " ".join(str(q).lower().replace("ё", "е").split())
+        if not needle:
+            return []
+        out = []
+        with self.lock:
+            rows = self.db.execute("SELECT id, conv, ts, role, text FROM conv_msgs ORDER BY id DESC LIMIT 3000").fetchall()
+        for rid, conv, ts, role, t in rows:
+            text = self.f.decrypt(t).decode()
+            if needle in text.lower().replace("ё", "е"):
+                out.append((conv, rid, ts, role, text))
+                if len(out) >= limit:
+                    break
+        return out
 
     def chats_between(self, t0, t1, limit=400):
         """Реплики за период, от старых к новым (не больше limit последних)."""
@@ -198,6 +267,39 @@ class Store:
             self.db.execute("DELETE FROM actions WHERE ts<?", (cut,))
             self.db.execute("DELETE FROM chat WHERE ts<?", (cut,))
             self.db.execute("DELETE FROM day_summary WHERE day<?", (time.strftime("%Y-%m-%d", time.localtime(cut)),))
+            self.db.execute("DELETE FROM conv_msgs WHERE ts<?", (cut,))
+            self.db.execute("DELETE FROM convs WHERE id NOT IN (SELECT conv FROM conv_msgs)")
+            self.db.commit()
+
+    # ---- просмотр того, что Mico AI знает (раздел «Что Mico AI знает») ----
+    VIEW_TABLES = ("events", "notes", "actions", "chat", "clips")
+
+    def list_rows(self, table, limit=300):
+        """Записи для просмотра: [(rowid, время, текст)] от новых к старым. Таблица — только из белого списка."""
+        if table not in self.VIEW_TABLES:
+            raise ValueError(table)
+        with self.lock:
+            if table == "events":                       # окна: программа — заголовок окна, оба зашифрованы
+                rows = self.db.execute("SELECT rowid, start, process, title FROM events "
+                                       "ORDER BY start DESC LIMIT ?", (int(limit),)).fetchall()
+                return [(rid, ts, f"{self.f.decrypt(p).decode()} — {self.f.decrypt(t).decode()}")
+                        for rid, ts, p, t in rows]
+            rows = self.db.execute(f"SELECT rowid, ts, text FROM {table} ORDER BY ts DESC LIMIT ?",
+                                   (int(limit),)).fetchall()
+        return [(rid, ts, self.f.decrypt(t).decode()) for rid, ts, t in rows]
+
+    def delete_row(self, table, rowid):
+        if table not in self.VIEW_TABLES:
+            raise ValueError(table)
+        with self.lock:
+            self.db.execute(f"DELETE FROM {table} WHERE rowid=?", (int(rowid),))
+            self.db.commit()
+
+    def wipe_table(self, table):
+        if table not in self.VIEW_TABLES:
+            raise ValueError(table)
+        with self.lock:
+            self.db.execute(f"DELETE FROM {table}")
             self.db.commit()
 
     def wipe(self):
@@ -212,4 +314,6 @@ class Store:
             self.db.execute("DELETE FROM clips")
             self.db.execute("DELETE FROM chat")
             self.db.execute("DELETE FROM day_summary")
+            self.db.execute("DELETE FROM conv_msgs")
+            self.db.execute("DELETE FROM convs")
             self.db.commit()

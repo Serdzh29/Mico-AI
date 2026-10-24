@@ -1,0 +1,118 @@
+"""Английские тексты мастера установки и удаления. Подключаются в i18n.EN.
+
+Ключ — русский текст из installer.py (как и во всём проекте). Если ключа нет, показывается русский.
+Строки с {...} форматируются через .format() уже после t().
+"""
+
+INSTALLER_EN = {
+    # установка: шаги и страницы
+    "Копирую Mico AI в папку программ": "Copying Mico AI to the programs folder",
+    "Создаю ярлык на рабочем столе": "Creating a desktop shortcut",
+    "Настраиваю автозапуск": "Setting up startup with Windows",
+    "Регистрирую Mico AI в Windows": "Registering Mico AI in Windows",
+    "Сохраняю настройки": "Saving settings",
+    "Я Mico AI, компаньон для Windows. Живу на рабочем столе, и я рядом, пока ты работаешь.": "I'm Mico AI, a companion for Windows. I live on your desktop and keep you company while you work.",
+    "Открываю программы и сайты одной фразой: «открой блокнот» или «открой ютуб».": "I open apps and websites with one phrase: “open notepad” or “open youtube”.",
+    "Громкость, яркость, Wi-Fi и Bluetooth: «громкость 30», «выключи Wi-Fi».": "Volume, brightness, Wi-Fi and Bluetooth: “volume 30”, “turn off Wi-Fi”.",
+    "Ставлю таймер и напоминания: «таймер на 10 минут», «напомни через час позвонить».": "I set timers and reminders: “timer for 10 minutes”, “remind me in an hour to call”.",
+    "Переключаю больше 130 настроек Windows и объясню, что каждая из них делает.": "I switch over 130 Windows settings and explain what each one does.",
+    "Если попросишь, посмотрю на экран: «что у меня на экране?».": "If you ask, I'll look at the screen: “what's on my screen?”.",
+    "Опасные команды, например выключение компьютера, я сначала спрошу «да или нет».": "For risky commands, like shutting down the PC, I'll ask “yes or no” first.",
+    "Отвечаю на вопросы прямо на этом компьютере.": "I answer questions right on this computer.",
+    "В голосовом режиме нажми на меня, и я обрадуюсь.": "In voice mode, tap me and I'll be happy.",
+    "Ответы считаются прямо на твоём компьютере, без облака.": "Answers are computed right on your PC, not in the cloud.",
+    "Ты можешь сказать «запомни», и я сохраню заметку. Потом спросишь — и я вспомню.": "Say “remember” and I'll save a note. Ask later, and I'll recall it.",
+    "Скоро установка закончится. В меню Mico AI, по правому щелчку, есть всё, что я умею.": "Installation is almost done. The Mico AI right-click menu has everything I can do.",
+    "Готовлю ответы Mico AI": "Preparing Mico AI replies",
+    "скачиваю {title}": "downloading {title}",
+    "Готовлю ответы Mico AI — скачиваю {title}: {done} из {total} МБ": "Preparing Mico AI replies — downloading {title}: {done} of {total} MB",
+    "Готовлю ответы Mico AI — скачиваю {title}": "Preparing Mico AI replies — downloading {title}",
+    "Скачать выбранную модель для ответов сейчас": "Download the chosen reply model now",
+    "Какую модель использовать для ответов?": "Which model should Mico AI use for replies?",
+    "Мощная": "Powerful",
+    "Альтернатива": "Alternative",
+    "многоязычная, без рассуждений; на видеокарте 4 ГБ часть работает на процессоре": "multilingual, no reasoning; on a 4 GB graphics card part runs on the processor",
+    "Лёгкая": "Light",
+    "Модель скачается через Ollama после установки: ⚙ Настройки → Модели.": "The model will be downloaded through Ollama after installation: ⚙ Settings → Models.",
+    "самая лёгкая, для компьютеров с 4–6 ГБ памяти": "the lightest, for PCs with 4–6 GB of memory",
+    "точнее Q4, для компьютеров с 8 ГБ памяти": "more accurate than Q4, for PCs with 8 GB of memory",
+    "умнее, отвечает быстро, для 16 ГБ памяти": "smarter, replies quickly, for 16 GB of memory",
+    "умнее, для 24 ГБ памяти и больше": "smarter, for 24 GB of memory and more",
+    "быстрая и сильная, для 32 ГБ памяти": "fast and strong, for 32 GB of memory",
+    "самая умная, быстрая, для 64 ГБ памяти": "the smartest, fast, for 64 GB of memory",
+    "лёгкая: быстро отвечает и хорошо понимает русский": "light: replies quickly and understands Russian well",
+    "мощная: умнее, для 16 ГБ памяти и больше": "powerful: smarter, for 16 GB of memory and more",
+    "Скачать модель для ответов сейчас": "Download the reply model now",
+    "Скачано {done} из {total} МБ": "Downloaded {done} of {total} MB",
+    "Модель не скачалась сейчас, скачаю позже в настройках": "The model did not download right now, I'll download it later in settings",
+    "Ответы работают на этом ПК. Модель подобрана под память: {title}, около {size} ГБ.":
+        "Replies work on this PC. The model is chosen for its memory: {title}, about {size} GB.",
+    "не получилось, включи позже в настройках": "it failed, turn it on later in settings",
+    "Установка Mico AI": "Install Mico AI",
+    "Установка": "Installation",
+    "Шаг 1 из 2": "Step 1 of 2",
+    "Компаньон на рабочем столе. Понимает текст, управляет Windows и отвечает на вопросы. Всё работает на твоём ПК.":
+        "A companion on your desktop. It understands text, controls Windows and answers questions. Everything runs on your PC.",
+    "Займёт около минуты.": "It takes about a minute.",
+    "Параметры": "Options",
+    "Запускать вместе с Windows": "Start with Windows",
+    "Ярлык на рабочем столе": "Desktop shortcut",
+    "✓ Движок найден, ответы будут работать": "✓ Engine found, replies will work",
+    "Для ответов нужен движок моделей. Без него ответы не заработают.":
+        "A model engine is needed for replies. Without it, replies won't work.",
+    "Готовлюсь…": "Getting ready…",
+    "Устанавливаю": "Installing",
+    "Готово": "Done",
+    "Запустить Mico AI": "Launch Mico AI",
+    "Mico AI установлен и готов к работе.": "Mico AI is installed and ready to use.",
+    "Далее": "Next",
+    "Установить": "Install",
+    "Назад": "Back",
+    "Закрыть": "Close",
+    "Не получилось: {err}. Если Mico AI открыт, закрой его и запусти установку снова.":
+        "Failed: {err}. If Mico AI is open, close it and run the setup again.",
+
+    # удаление: страницы и варианты
+    "Удаление": "Uninstall",
+    "Удаление Mico AI": "Uninstall Mico AI",
+    "Удалить": "Uninstall",
+    "Удалить Mico AI?": "Uninstall Mico AI?",
+    "Программу удалим в любом случае. Остальное выбираешь сам.":
+        "The program will be removed in any case. You choose the rest.",
+    "Запись в «Приложениях» Windows удалится в любом случае.":
+        "The entry in Windows Apps will be removed in any case.",
+    "Автозапуск с Windows": "Startup with Windows",
+    "Mico AI перестанет запускаться при входе в систему.": "Mico AI will stop starting when you sign in to Windows.",
+    "История, настройки и напоминания": "History, settings and reminders",
+    "Чат, память и напоминания. Оставь, если переустановишь Mico AI с прежними данными.":
+        "Chat, memory and reminders. Keep these if you reinstall Mico AI with your existing data.",
+    "Модели, которые скачал Mico AI": "Models downloaded by Mico AI",
+    "Их могут использовать другие программы. Удаление освобождает место на диске.":
+        "Other programs may use them. Removing them frees disk space.",
+    "Программа Mico AI · {size} МБ": "Mico AI program · {size} MB",
+    "Удаляю": "Removing",
+    "Mico AI удалён": "Mico AI has been removed",
+    "Удаление доступно только для установленной версии Mico AI.":
+        "Uninstalling is only available for an installed copy of Mico AI.",
+
+    # удаление: шаги и итог
+    "Снимаю автозапуск": "Removing the startup entry",
+    "Удаляю ярлык на рабочем столе": "Removing the desktop shortcut",
+    "Удаляю модели Mico AI": "Removing Mico AI models",
+    "Убираю запись из «Приложений» Windows": "Removing the entry from Windows Apps",
+    "Почти готово": "Almost done",
+    "Движок не найден, модели не тронуты": "The engine was not found, the models were not touched",
+    "не удалось удалить {names}": "could not remove {names}",
+    "Не получилось: {err}": "Failed: {err}",
+    "Не получилось": "Failed",
+    "Удалено": "Removed",
+    "Осталось по твоему выбору": "Kept as you chose",
+    "Можно повторить позже.": "You can try again later.",
+    "программа Mico AI": "Mico AI program",
+    "ярлык на рабочем столе": "desktop shortcut",
+    "запись в «Приложениях» Windows": "entry in Windows Apps",
+    "автозапуск": "startup entry",
+    "история и настройки": "history and settings",
+    "модели Mico AI": "Mico AI models",
+    "история и настройки в папке Mico AI (AppData)": "history and settings in the Mico AI folder (AppData)",
+}

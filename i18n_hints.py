@@ -1,6 +1,8 @@
 """Английские описания настроек. Ключ — русский текст из settings_info.py, значение — перевод."""
 
 EN_HINTS = {
+    "Рассказывать погоду, когда Mico AI запускается вместе с ПК.": "Tell the weather when Mico AI starts with the PC.",
+    "Язык интерфейса: English или Русский. Применяется после перезапуска Mico AI.": "Interface language: English or Русский. Applies after Mico AI restarts.",
     # ---- настройки Windows (INFO) ----
     "Позволяет ставить программы не только из магазина Microsoft. Нужен только программистам.": "Lets you install apps from outside the Microsoft Store. Only needed by developers.",
     "Позволяет управлять этим компьютером через браузер в домашней сети. Лучше выключить.": "Lets you control this computer through a browser on your home network. Better turned off.",
@@ -155,7 +157,7 @@ EN_HINTS = {
     "Основной цвет Mico AI и окна чата.": "The main color of Mico AI and the chat window.",
     "Рамка вокруг поля ввода в чате Mico AI. Выключи, если она мешает.": "A frame around the input field in the Mico AI chat. Turn off if it gets in the way.",
     "Рамка вокруг строки над Mico AI, где он показывает ответы.": "A frame around the bar above Mico AI where answers appear.",
-    "Рамки у кнопок под ответом: «Повторить», «Чат» и ⚡.": "Frames around the buttons under an answer: 'Retry', 'Chat' and ⚡.",
+    "Рамки у кнопок под ответом: «Повторить», «Чат» и быстрые действия.": "Frames around the buttons under an answer: 'Retry', 'Chat' and the quick actions.",
     "Сколько кадров в секунду тратится на анимацию, когда Mico AI спит. Меньше — экономнее.": "How many frames per second are spent on animation while Mico AI sleeps. Fewer saves more.",
     "Размер самого Mico AI на экране.": "The size of Mico AI on the screen.",
     "Прозрачность окна чата: 100% — непрозрачное, 30% — почти незаметное.": "Chat window transparency: 100% is solid, 30% is almost invisible.",
@@ -170,7 +172,6 @@ EN_HINTS = {
     "Если скопирован текст ошибки, Mico AI предложит его объяснить. Текст никуда не отправляется без твоего согласия.": "If you copy an error message, Mico AI offers to explain it. The text is not sent anywhere without your consent.",
     "Если программа зависла или открыто окно с ошибкой, Mico AI предложит помощь. Сам ничего не закрывает.": "If a program freezes or an error window opens, Mico AI offers help. It never closes anything by itself.",
     "Откуда брать цвет полоски: из цвета Mico AI, из цвета действия или свой.": "Where the bar color comes from: Mico AI's color, the action's color, or your own.",
-    "Поисковик для команды «загугли …». Открывается в браузере.": "Search engine for the 'google …' command. Opens in the browser.",
     "При включении компьютера Mico AI поздоровается, расскажет про вчерашний день и погоду.": "When the computer starts, Mico AI says hello and tells you about yesterday and the weather.",
     "Mico AI запускается сам при входе в Windows. Выключи, если запускаешь его вручную.": "Mico AI starts by itself when you sign in to Windows. Turn off if you start it manually.",
     "Сколько дней хранить историю разговоров и команд. «Всегда» — не удалять.": "How many days to keep the history of conversations and commands. 'Always' means never delete.",

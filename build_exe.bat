@@ -11,7 +11,7 @@ if exist "knowledge" set "DATA=%DATA% --add-data knowledge;knowledge"
 if exist "data" set "DATA=%DATA% --add-data data;data"
 python -m PyInstaller --noconsole --onefile --clean --name Mico %DATA% %ICON% --manifest Mico.manifest ^
   --hidden-import win32crypt --hidden-import win32com.client --hidden-import pythoncom ^
-  --hidden-import pywintypes --exclude-module tkinter main.py
+  --hidden-import pywintypes --collect-all faster_whisper --collect-all ctranslate2 --collect-all piper --collect-all piper_phonemize --collect-all onnxruntime --collect-all sounddevice --collect-all scipy --collect-all llama_cpp --exclude-module tkinter main.py
 if errorlevel 1 (echo Build failed. See the messages above. & pause & exit /b 1)
 echo.
 echo Done: dist\Mico.exe

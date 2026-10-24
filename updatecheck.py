@@ -10,7 +10,7 @@ import version
 
 DAY = 24 * 3600
 TIMEOUT = 6
-_VERSION = re.compile(r"\d{4}\.\d{2}\.\d{4}(?:\s*\(?[a-z]\)?)?")   # ГГГГ.ММ.ДДNN и срочное исправление (a, b…)
+_VERSION = re.compile(r"M\d{2}\.\d{2}\.\d{2}(?:\.\d+)?|\d{4}\.\d{2}\.\d{4}(?:\s*\(?[a-z]\)?)?")   # M26.10.24(.N) и старые ГГГГ.ММ.ДДNN (a, b…)
 
 
 def fetch_latest(api_url=None, timeout=TIMEOUT):

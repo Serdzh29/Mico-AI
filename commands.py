@@ -4,7 +4,6 @@ import difflib, json, os, re, subprocess, threading, time, webbrowser
 import guard
 import i18n
 from datetime import datetime, timedelta
-from urllib.parse import quote
 
 import context
 import components
@@ -13,7 +12,6 @@ from actions import Reply, reminder, sysinfo
 from ru_text import normalize, translit
 
 HOME = os.path.expanduser("~")
-SEARCH_URL = "https://www.google.com/search?q="      # main.py подставит из настроек
 
 
 class Ctx:
@@ -55,12 +53,12 @@ def _pending(ql):
             return fn()
         if NO.fullmatch(ql):
             _PENDING["fn"] = None
-            return Reply("Хорошо, ничего не делаю 👌", "happy")
+            return Reply("Хорошо, ничего не делаю 👌", None)
     _PENDING["fn"] = None if time.time() >= _PENDING["until"] else _PENDING["fn"]
     if time.time() < _SHUTDOWN_UNTIL[0] and (NO.fullmatch(ql) or re.search(r"отмени\w*\s+(выключен|перезагруз)", ql)):
         W.abort_shutdown()
         _SHUTDOWN_UNTIL[0] = 0
-        return Reply("Остановил выключение ✋", "happy")
+        return Reply("Остановил выключение ✋", None)
     return None
 
 
@@ -90,7 +88,7 @@ def _power(ql, ctx):
     if re.search(r"очисти\w*\s+корзину", ql):
         return _ask("Очистить корзину навсегда?",
                     lambda: Reply("Корзина очищена 🗑" if W.empty_recycle_bin() else "Не получилось очистить корзину",
-                                  "happy"))
+                                  None))
     if re.search(r"гибернац", ql):
         W.hibernate()
         return Reply("Гибернация 💤", "sleepy")
@@ -127,7 +125,7 @@ def _timer(ql, ctx):
         for t in _TIMERS:
             t.cancel()
         _TIMERS.clear()
-        return Reply(f"Отменил таймеры и будильники ({n}) ✅" if n else "Активных таймеров нет 🤷", "happy")
+        return Reply(f"Отменил таймеры и будильники ({n}) ✅" if n else "Активных таймеров нет 🤷", None)
     if "будильник" in ql:
         m = re.search(r"(?:на|в)\s*(\d{1,2})(?:\s*[:.]?\s*(\d{2}))?\s*(утра|вечера|дня|ночи)?", ql)
         if not m:
@@ -143,7 +141,7 @@ def _timer(ql, ctx):
             when += timedelta(days=1)
         _schedule((when - now).total_seconds(), ctx, f"будильник на {when:%H:%M} — пора!")
         return Reply(f"Будильник на {when:%H:%M} ({'завтра' if when.date() != now.date() else 'сегодня'}) ⏰ "
-                     "Сработает, пока Mico AI запущен.", "happy")
+                     "Сработает, пока Mico AI запущен.", None)
     if "таймер" in ql:
         pairs = re.findall(r"(\d+)\s*(сек\w*|мин\w*|час\w*|ч\b)", ql)
         if not pairs:
@@ -152,7 +150,7 @@ def _timer(ql, ctx):
         if not 1 <= secs <= 86400:
             return Reply("Я умею таймеры от секунды до 24 часов ⏳", "curious")
         _schedule(secs, ctx, f"таймер на {_fmt_dur(secs)}: время вышло!")
-        return Reply(f"Таймер на {_fmt_dur(secs)} запущен ⏳ Скажу, когда время выйдет (пока Mico AI запущен).", "happy")
+        return Reply(f"Таймер на {_fmt_dur(secs)} запущен ⏳ Скажу, когда время выйдет (пока Mico AI запущен).", None)
     return None
 
 
@@ -205,20 +203,6 @@ def site_url(text):
         if base and tld and len(labels) == 2:
             return f"https://{base}.{tld}"
     return None
-
-
-def _websearch(ql, ctx):
-    m = (re.search(r"\b(?:загугли|погугли|нагугли)\s+(.+)", ql) or
-         re.search(r"\b(?:найди|поищи|ищи)\s+(?:в\s+(?:интернете|сети|гугле|яндексе|браузере)\s+)(.+)", ql) or
-         re.search(r"\b(?:найди|поищи|ищи)\s+(.+?)\s+в\s+(?:интернете|сети|гугле|яндексе|браузере)\b", ql))
-    if not m:
-        return None
-    q = m.group(1).strip(" .!?")
-    refusal = guard.search_refusal(q)                 # запрещённое не ищем
-    if refusal:
-        return Reply(refusal, "curious")
-    webbrowser.open(SEARCH_URL + quote(q))
-    return Reply(f"Ищу в интернете: «{q}» 🔎", "curious")
 
 
 # ============================ Страницы настроек Windows ============================
@@ -293,16 +277,16 @@ def _remember_toggle(t, want):
 def _toggle_do(t, want):
     if t.page:
         os.startfile("ms-settings:" + t.page)
-        return Reply(f"«{t.name}» Windows не даёт переключать из программ — открыл нужную страницу ⚙️", "happy")
+        return Reply(f"«{t.name}» Windows не даёт переключать из программ — открыл нужную страницу ⚙️", None)
     if t.combo:
         W.press(*t.combo)
-        return Reply(f"{t.name}: нажал {'+'.join(c.upper() for c in t.combo)} ⌨️", "happy")
+        return Reply(f"{t.name}: нажал {'+'.join(c.upper() for c in t.combo)} ⌨️", None)
     if t.proc:
         if want:
             subprocess.Popen(["cmd", "/c", "start", "", t.proc], creationflags=W.NOWIN)
         else:
             W.run_quiet("taskkill", "/IM", t.proc, "/F")
-        return Reply(f"{t.name}: {'включено' if want else 'выключено'} ✅", "happy")
+        return Reply(f"{t.name}: {'включено' if want else 'выключено'} ✅", None)
     try:
         ok, msg = t.fn(want)
     except Exception as e:
@@ -312,7 +296,7 @@ def _toggle_do(t, want):
         return Reply(f"{t.name}: не получилось ({hint}) 😔", "sad")
     _remember_toggle(t, want)
     note = t.note if t.note and (want or not t.note_on_only) else ""
-    return Reply(f"{t.name} — {'включено' if want else 'выключено'} ✅" + (f" {note}" if note else ""), "happy")
+    return Reply(f"{t.name} — {'включено' if want else 'выключено'} ✅" + (f" {note}" if note else ""), None)
 
 
 def _toggles(ql, ctx):
@@ -350,28 +334,6 @@ def _system(ql, ctx):
     return None
 
 
-# ============================ Ссылки по теме ============================
-LINKS_RE = re.compile(r"^(?:открой|покажи|дай|найди|поищи)\s+(?:мне\s+)?(?:ссылки|ссылку|справку|инструкци\w*|статьи|статью)"
-                      r"\s*(?:по\s+теме\s+|по\s+|о\s+|про\s+|для\s+)?(.+)$|"
-                      r"^(?:ссылки|справка|инструкция)\s+(?:по\s+теме\s+|по\s+|о\s+|про\s+|для\s+)?(.+)$")
-
-
-def _links(ql, ctx):
-    """«открой ссылки по теме блютуз» / «справка по брандмауэру»: ищет официальные статьи Microsoft по теме."""
-    m = LINKS_RE.search(ql.strip(" .!?"))
-    if not m:
-        return None
-    topic = (m.group(1) or m.group(2) or "").strip(" .!?")
-    if not topic:
-        return Reply("По какой теме? Например: «открой ссылки по теме блютуз» 🔗", "curious")
-    t = components.find_toggle(topic)
-    name = t.name if t else (settings_page(topic) or (None, topic))[1]
-    query = f"{name} Microsoft инструкция" + ("" if "windows" in name.lower() else " Windows 11")
-    webbrowser.open(SEARCH_URL + quote(query))
-    return Reply(f"Открыл поиск официальных статей по теме «{name}» 🔗 Если нужна страница настроек — скажи «открой настройки {name}».",
-                 "happy")
-
-
 def _followup(ql, ctx):
     """Короткие продолжения по памяти последнего действия: «дальше», «ещё», «назад», «а блютуз?»."""
     last = context.last()
@@ -397,14 +359,14 @@ def _vol_abs(n):
         return Reply("Не смог выставить точную громкость (установи pycaw: pip install pycaw comtypes) 😔", "sad")
     context.remember("volume", repeat=lambda: _vol_abs(n),
                      undo=(lambda: _vol_abs(prev)) if prev is not None else None)
-    return Reply(f"Громкость {v}% 🔊", "happy")
+    return Reply(f"Громкость {v}% 🔊", None)
 
 
 def _vol_delta(d):
     v = W.change_volume(d)
     context.remember("volume", repeat=lambda: _vol_delta(d), undo=lambda: _vol_delta(-d))
     word = "громче 🔊" if d > 0 else "тише 🔉"
-    return Reply(f"Сделал {word}{f' — {v}%' if v is not None else ''}", "happy")
+    return Reply(f"Сделал {word}{f' — {v}%' if v is not None else ''}", None)
 
 
 def _bright_abs(n):
@@ -414,7 +376,7 @@ def _bright_abs(n):
         return Reply("Не получилось (яркость программно меняется на ноутбуках и совместимых мониторах) 😔", "sad")
     context.remember("bright", repeat=lambda: _bright_abs(n),
                      undo=(lambda: _bright_abs(prev)) if prev is not None else None)
-    return Reply(f"Яркость {v}% 🔆", "happy")
+    return Reply(f"Яркость {v}% 🔆", None)
 
 
 def _bright_delta(d):
@@ -434,7 +396,7 @@ def _media(kind):
     W.press(kind)
     undo = MEDIA_UNDO.get(kind)
     context.remember("media", repeat=lambda: _media(kind), undo=(lambda: _media(undo)) if undo else None)
-    return Reply(MEDIA_TEXT[kind], "happy")
+    return Reply(MEDIA_TEXT[kind], None)
 
 
 def _audio_screen(ql, ctx):
@@ -454,10 +416,10 @@ def _audio_screen(ql, ctx):
         return _vol_delta(-big)
     if re.search(r"без звука|выключи звук|отключи звук|\bmute\b|заглуши", ql):
         W.set_mute(True)
-        return Reply("Звук выключен 🔇", "happy")
+        return Reply("Звук выключен 🔇", None)
     if re.search(r"включи звук|верни звук|размуть|со звуком", ql):
         W.set_mute(False)
-        return Reply("Звук включён 🔊", "happy")
+        return Reply("Звук включён 🔊", None)
     # яркость
     m = re.search(r"яркост\w*\D{0,15}(\d{1,3})\b", ql)
     target = int(m.group(1)) if m else (100 if re.search(r"яркост\w*.*(максимум|максимальн|полн)", ql) else
@@ -476,7 +438,7 @@ def _audio_screen(ql, ctx):
         off = bool(OFF_RE.search(ql))
         want_light = bool(light) != off if light else off
         W.set_theme(want_light)
-        return Reply("Включил светлую тему ☀️" if want_light else "Включил тёмную тему 🌙", "happy")
+        return Reply("Включил светлую тему ☀️" if want_light else "Включил тёмную тему 🌙", None)
     # медиа
     if re.search(r"\bпауза\b|на паузу|останови\s+(музыку|видео|воспроизведение|песню)|продолжи\s+(музыку|видео|воспроизведение)|"
                  r"возобнови", ql):
@@ -533,62 +495,62 @@ def _app_tokens(name):
 def _windows(ql, ctx):
     if re.search(r"(сверни|свернуть|убери)\s+все(\s+окна)?|покажи\s+рабочий\s+стол", ql):
         W.press("win", "d")
-        return Reply("Свернул всё, вот рабочий стол 🖥", "happy")
+        return Reply("Свернул всё, вот рабочий стол 🖥", None)
     if re.search(r"(создай|новый|открой новый|добавь)\s+(виртуальный\s+)?рабочий\s+стол", ql):
         W.press("win", "ctrl", "d")
-        return Reply("Новый рабочий стол создан 🪟", "happy")
+        return Reply("Новый рабочий стол создан 🪟", None)
     if re.search(r"(следующий|на следующий|вперед на)\s+рабочий\s+стол", ql):
         W.press("win", "ctrl", "right")
-        return Reply("Перешёл на следующий рабочий стол ➡️", "happy")
+        return Reply("Перешёл на следующий рабочий стол ➡️", None)
     if re.search(r"(предыдущий|на предыдущий|назад на)\s+рабочий\s+стол", ql):
         W.press("win", "ctrl", "left")
-        return Reply("Перешёл на предыдущий рабочий стол ⬅️", "happy")
+        return Reply("Перешёл на предыдущий рабочий стол ⬅️", None)
     if re.search(r"закрой\s+(этот\s+)?(виртуальный\s+)?рабочий\s+стол", ql):
         W.press("win", "ctrl", "f4")
-        return Reply("Закрыл рабочий стол", "happy")
+        return Reply("Закрыл рабочий стол", None)
     if re.search(r"покажи\s+все\s+(окна|задачи|приложения)|обзор задач|представление задач|task view", ql):
         W.press("win", "tab")
-        return Reply("Показываю все окна 🗂", "happy")
+        return Reply("Показываю все окна 🗂", None)
     if re.search(r"(переключи(сь)?|смени|перейди)\s+(на\s+)?(следующ\w*\s+|друг\w*\s+|предыдущ\w*\s+)?"
                  r"(задач\w*|окн\w*|приложени\w*)\W*$|следующ\w*\s+(задач\w*|окн\w*)|alt tab", ql):
         W.press("alt", "tab")
-        return Reply("Переключил окно 🔀", "happy")
+        return Reply("Переключил окно 🔀", None)
     m = re.search(r"переключи(?:сь)?\s+(?:на|в)\s+(.+)", ql)
     if m:
         name = m.group(1).strip(" .!?")
         wins = W.find_windows(_app_tokens(name))
         if wins and W.focus(wins[0][0]):
-            return Reply(f"Переключился на «{wins[0][1][:50]}» 🔀", "happy")
+            return Reply(f"Переключился на «{wins[0][1][:50]}» 🔀", None)
         return Reply(f"Не нашёл открытое окно «{name}» 🤔", "sad")
     if re.search(r"(переключи|смени|поменяй)\s+(раскладку|язык)(\s+ввода)?|смени\s+язык", ql):
         W.press("win", "space")
-        return Reply("Переключил раскладку ⌨️", "happy")
+        return Reply("Переключил раскладку ⌨️", None)
     if re.search(r"(вырежи|выдели|сними)\s+область|скриншот области|ножницы для области", ql):
         W.press("win", "shift", "s")
-        return Reply("Выдели область экрана мышкой ✂️", "happy")
+        return Reply("Выдели область экрана мышкой ✂️", None)
     if re.search(r"(открой|покажи)\s+(историю\s+буфера|буфер обмена)\b|история буфера обмена", ql):
         W.press("win", "v")
-        return Reply("Открыл историю буфера (Win+V) 📋", "happy")
+        return Reply("Открыл историю буфера (Win+V) 📋", None)
     if re.search(r"(прикрепи|прижми|поставь)\s+окно\s+(слева|налево)|окно\s+налево", ql):
         _refocus(ctx)
         W.press("win", "left")
-        return Reply("Окно слева ⬅️", "happy")
+        return Reply("Окно слева ⬅️", None)
     if re.search(r"(прикрепи|прижми|поставь)\s+окно\s+(справа|направо)|окно\s+направо", ql):
         _refocus(ctx)
         W.press("win", "right")
-        return Reply("Окно справа ➡️", "happy")
+        return Reply("Окно справа ➡️", None)
     if re.search(r"(сверни|свернуть)(\s+(это|текущее|активное))?(\s+окно)?\W*$", ql):
-        return Reply("Свернул окно ⬇️" if _window_cmd(ctx, 6) else "Не вижу окна, которое можно свернуть 🤔", "happy")
+        return Reply("Свернул окно ⬇️" if _window_cmd(ctx, 6) else "Не вижу окна, которое можно свернуть 🤔", None)
     if re.search(r"(разверни|развернуть)(\s+(это|текущее|активное))?(\s+окно)?(\s+на весь экран)?\W*$", ql):
-        return Reply("Развернул окно ⬆️" if _window_cmd(ctx, 3) else "Не вижу окна, которое можно развернуть 🤔", "happy")
+        return Reply("Развернул окно ⬆️" if _window_cmd(ctx, 3) else "Не вижу окна, которое можно развернуть 🤔", None)
     if re.search(r"(восстанови|верни)\s+окно", ql):
-        return Reply("Вернул окно ↕️" if _window_cmd(ctx, 9) else "Не вижу окна 🤔", "happy")
+        return Reply("Вернул окно ↕️" if _window_cmd(ctx, 9) else "Не вижу окна 🤔", None)
     if re.search(r"(закрой|закрыть)\s+(это\s+|текущее\s+|активное\s+)?окно\W*$", ql):
         h = ctx.last_hwnd()
         if not h:
             return Reply("Не вижу окна, которое можно закрыть 🤔", "sad")
         W.close_window(h)
-        return Reply("Закрываю окно ❎", "happy")
+        return Reply("Закрываю окно ❎", None)
     return None
 
 
@@ -646,7 +608,7 @@ def _find_start_app(name):
             s = max(difflib.SequenceMatcher(None, n, low).ratio(), difflib.SequenceMatcher(None, lat, low).ratio())
         if s > best_s:
             best, best_s = (nm, aid), s
-    return best if best_s >= 0.8 else None
+    return best if best_s >= 0.9 else None      # раньше 0.8: «как дела» тянуло к случайным программам
 
 
 def _launch(cmd):
@@ -676,9 +638,6 @@ def _open_item(item, strict=False):
     if url:
         webbrowser.open(url)
         return url.split("//", 1)[-1], True
-    if is_site:
-        webbrowser.open(SEARCH_URL + quote(item))
-        return f"поиск «{item}»", True
     if item in ("браузер", "интернет"):
         webbrowser.open("about:blank")
         return "браузер", True
@@ -725,7 +684,8 @@ def _open_item(item, strict=False):
     return item, False
 
 
-OPEN_RE = re.compile(r"\b(открой|открыть|запусти|запустить|включи|зайди на|зайди в|перейди на|перейди в|"
+OPEN_RE = re.compile(r"^(?:(?:пожалуйста|мико|mico|мне|давай|ну|можешь|можете|ты|бы|будь\s+добр|сейчас)\s+)*"
+                     r"(открой|открыть|запусти|запустить|включи|зайди на|зайди в|перейди на|перейди в|"
                      r"давай откроем)\s+(.+)$")
 SPLIT_ITEMS = re.compile(r"\s*,\s*|\s+и\s+|\s+а также\s+|\s+плюс\s+|\s*&\s*")
 
@@ -768,9 +728,9 @@ def _start_app(name):
 def _play_service(svc):
     name, _, app, site = svc
     if app and _start_app(app):
-        return Reply(f"Открываю {name} 🎵", "happy")
+        return Reply(f"Открываю {name} 🎵", None)
     webbrowser.open(site)
-    return Reply(f"{name} не установлен — открыл в браузере 🎵", "happy")
+    return Reply(f"{name} не установлен — открыл в браузере 🎵", None)
 
 
 def _music(ql, ctx):
@@ -781,10 +741,10 @@ def _music(ql, ctx):
         return None
     for svc in MUSIC_SERVICES:
         if svc[2] and _start_app(svc[2]):
-            return Reply(f"Включаю музыку в {svc[0]} 🎵", "happy")
+            return Reply(f"Включаю музыку в {svc[0]} 🎵", None)
     webbrowser.open(MUSIC_SERVICES[1][3])
     return Reply("Музыкального приложения не нашёл, открыл Яндекс Музыку в браузере 🎵. "
-                 "Можешь назвать сервис, например «включи музыку в саунд клауде».", "happy")
+                 "Можешь назвать сервис, например «включи музыку в саунд клауде».", None)
 
 
 def _open_close(ql, ctx):
@@ -834,7 +794,7 @@ def _toggle_fallback(ql, ctx):
     sp = settings_page(ql)
     if sp:
         os.startfile(sp[0])
-        return Reply(f"Прямого переключателя для этого нет — открыл раздел «{sp[1]}» ⚙️", "happy")
+        return Reply(f"Прямого переключателя для этого нет — открыл раздел «{sp[1]}» ⚙️", None)
     names = [] if re.search(r"\b(умеешь|можешь)\b", ql) else components.suggest(ql)
     if names:
         return Reply("Не знаю такого переключателя. Возможно, ты имел в виду: "
@@ -876,7 +836,7 @@ def _adjust_to(a, value, prev=None):
                      repeat=lambda: _adjust_to(a, min(a.hi, value + a.step), prev=value),
                      undo=(lambda: _adjust_to(a, prev, prev=value)) if prev is not None else None)
     note = f" {a.note}" if a.note else ""
-    return Reply(f"{a.name} — {a.label(value)} ✅{note}", "happy")
+    return Reply(f"{a.name} — {a.label(value)} ✅{note}", None)
 
 
 def _adjust_info(a):
@@ -931,7 +891,7 @@ def _choice(ql, ctx):
     if not ok:
         return Reply(f"{c.name}: не получилось ({msg or 'Windows отказала'}) 😔", "sad")
     note = f" {c.note}" if c.note else ""
-    return Reply(f"{c.name} — {label} ✅{note}", "happy")
+    return Reply(f"{c.name} — {label} ✅{note}", None)
 
 
 def _info(ql, ctx):
@@ -977,7 +937,7 @@ VERBS = (r"открой|запусти|включи|выключи|отключ�
 
 
 def _split(ql):
-    if re.match(r"\s*(напомни|найди|поищи|загугли|ищи)", ql):
+    if re.match(r"\s*(напомни|найди|поищи|ищи)", ql):
         return [ql]
     parts = re.split(rf"\s*(?:,|;|\bи\b|\bа потом\b|\bпотом\b|\bзатем\b|\bпосле этого\b|\bа также\b)\s+"
                      rf"(?=(?:{VERBS})\b)", ql)
@@ -985,7 +945,7 @@ def _split(ql):
 
 
 def _one(ql, ctx):
-    for fn in (_adjust, _choice, _power, _timer, lambda q, c: reminder(q, c.notify), _websearch, _links, _info, _audio_screen,
+    for fn in (_adjust, _choice, _power, _timer, lambda q, c: reminder(q, c.notify), _info, _audio_screen,
                _windows, _music, _toggles, _system, _open_close, _toggle_fallback, lambda q, c: sysinfo(q)):
         try:
             r = fn(ql, ctx)

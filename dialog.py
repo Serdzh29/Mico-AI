@@ -19,6 +19,17 @@ class Dialog:
         self.window, self.max_turns = window, max_turns
         self.turns = []                                   # [(время, роль: 'user' | 'mico', текст)]
         self.persist = persist                            # необязательно: fn(время, роль, текст) — журнал на диске
+        self.pinned = False                               # открыт сохранённый чат: помним его реплики, а не только последние минуты
+
+    def restore(self, items):
+        """Открыли сохранённый чат: его последние реплики [(время, роль, текст)] становятся контекстом.
+        Окно по времени не действует, пока чат открыт; новый чат начинается через clear()."""
+        self.turns = [(ts, role, (text or "")[:MAX_CHARS]) for ts, role, text in items][-self.max_turns:]
+        self.pinned = True
+
+    def clear(self):
+        self.turns = []
+        self.pinned = False
 
     def add(self, role, text, now=None):
         text = (text or "").strip()
@@ -36,7 +47,8 @@ class Dialog:
     def recent(self, now=None):
         """Реплики, которые ещё помнятся (не старше окна), от старых к новым."""
         now = now or time.time()
-        self.turns = [t for t in self.turns if now - t[0] <= self.window]
+        if not self.pinned:
+            self.turns = [t for t in self.turns if now - t[0] <= self.window]
         return self.turns[-self.max_turns:]
 
     def messages(self, now=None, limit=8):

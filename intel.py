@@ -35,16 +35,6 @@ def _rgb(hex_color):
         return DEFAULT_ACCENT
 
 
-def glow_colors(accent, phase, stops=4):
-    """Цвета полосы по краю: от цвета Mico AI к светлому оттенку и обратно. Меняются плавно по phase."""
-    base = _rgb(accent)
-    out = []
-    for i in range(stops):
-        t = (math.sin(phase + i * 1.3) + 1) / 2                        # 0..1
-        out.append(tuple(int(round(c + (255 - c) * 0.45 * t)) for c in base))
-    return out
-
-
 def approach(level, target, k=0.12):
     """Плавно тянет уровень яркости к цели и «защёлкивает» в конце, чтобы не дрожать."""
     v = level + (target - level) * k
@@ -56,17 +46,9 @@ def subtitle_text(text, limit=SUBTITLE_MAX):
     return s if len(s) <= limit else s[:limit - 1].rstrip() + "…"
 
 
-def chat_opacity(cfg):
-    """Прозрачность всех чатов Mico AI: 0.3 — почти незаметны, 1.0 — непрозрачны. По умолчанию 1.0."""
-    try:
-        return min(1.0, max(0.3, float(cfg.get("chat_opacity", 1.0))))
-    except (TypeError, ValueError):
-        return 1.0
-
-
-def subtitle_full(text):
-    """Весь ответ без обрезки — для строки над Mico AI, которая теперь прокручивается."""
-    return " ".join(str(text or "").split())
+def chat_opacity(cfg=None):
+    """Прозрачности нет: чаты Mico AI всегда непрозрачные (матовое тёмное стекло)."""
+    return 1.0
 
 
 def opens_chat(text):
@@ -145,7 +127,7 @@ def checkup(cfg, installed, ram_gb, free_gb):
         out.append((False, f"Свободного места на диске {free_gb:.0f} ГБ, а нужно около {MIN_DISK_GB}. "
                            "Освободи место: «что занимает место»."))
     if not installed:
-        out.append((None, "Модели не проверить: Ollama не отвечает. Запусти Ollama и повтори включение Mico AI."))
+        out.append((None, "Модели не проверить: движок не отвечает. Перезапусти Mico AI и повтори включение."))
     else:
         for label, name in (("Модель для общения", cfg.get("text_model")),
                             ("Модель для экрана", cfg.get("vision_model"))):
@@ -163,10 +145,6 @@ def checkup_lines(cfg, installed, ram_gb, free_gb):
     mark = {True: "✅", False: "⚠️", None: "ℹ️"}
     return [f"{mark[ok]} {text}" for ok, text in checkup(cfg, installed, ram_gb, free_gb)]
 
-
-def subtitle_seconds(text):
-    """Сколько держим строку: короткую — 4 секунды, длинную — до 12, чтобы успели прочитать."""
-    return min(12.0, 4.0 + len(subtitle_text(text)) / 20)
 
 # ----- Mico AI: состояния полоски, тишина, системные проверки, приветствие, быстрые действия -----
 SESSION_SEC = 30 * 60                    # Mico AI помнит тему разговора дольше обычного: 30 минут
@@ -348,6 +326,23 @@ def glow_height(cfg):
 ARRIVE_SEC = 0.42                                    # Mico AI выезжает из угла в центр внизу
 LEAVE_SEC = 0.35                                     # и уезжает обратно, когда Mico AI выключили
 SLEEP_DROP_PX = 90                                   # во сне Mico AI уходит вниз на столько пикселей
+TAP_WINDOW_SEC = 2.5                                 # нажатия по Mico в голосовом режиме считаем за это время
+TAP_LIMIT = 5                                        # столько нажатий подряд — Mico просит не спешить
+TAP_WARN_GAP_SEC = 12                                # просьбу повторяем не чаще, чем раз в это время
+TAP_WARNING = "Эй, не так быстро! Я чувствительный, нажимай, пожалуйста, помедленнее."
+SCREEN_HIDE_MS = 320                                 # сколько ждём, пока Mico уйдёт с экрана, прежде чем снимать экран
+SCREEN_MAX_WAIT_MS = 90000                           # если ответа на «что на экране» так долго нет — Mico всё равно вернётся
+SCREEN_TALK_SEC = 90                                 # после вопроса про экран следующие вопросы в голосовом режиме тоже про экран
+SCREEN_FOLLOW_PROMPT = ("На картинке — экран пользователя прямо сейчас. Если вопрос про него — ответь по картинке, "
+                        "коротко и по делу. Если вопрос не про экран — ответь обычно и картинку не упоминай.\n\nВопрос: {question}")
+_SCREEN_WORDS = re.compile(r"экран|окн|здесь|тут|вот|этот|эта|\bэто\b|картин|скрин|написан|видиш|посмотри|прочитай|что за|что там|на что", re.I)
+
+
+def is_screen_followup(text):
+    """Вопрос похож на вопрос про то, что видно на экране («что здесь написано», «это что»)."""
+    return bool(_SCREEN_WORDS.search(text or ""))
+
+
 BLINK_SEC = 0.2                                      # одно моргание: закрылся и открылся
 _RGB_HEX = re.compile(r"#([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})")
 
@@ -404,13 +399,9 @@ def edge_band(cfg):
     return max(EDGE_W_MIN, min(EDGE_W_MAX, v))
 
 
-def edge_alpha(cfg):
-    """Прозрачность полосок — та же, что у волн («Прозрачность волн и полосок»). 85 — как по умолчанию."""
-    try:
-        v = float(cfg.get("wave_opacity", 85))
-    except (TypeError, ValueError):
-        v = 85.0
-    return max(0.0, min(100.0, v)) / 100.0 * 1.6       # 85 даёт заметные полоски, 100 — самые яркие, 0 — не видны
+def edge_alpha(cfg=None):
+    """Полоски по краям всегда в полную силу: прозрачности нет."""
+    return 1.0
 
 
 def wave_color(cfg, state):
@@ -468,21 +459,6 @@ def lerp_rgb(a, b, k):
     """Плавный переход между двумя цветами: k от 0 до 1."""
     k = max(0.0, min(1.0, k))
     return tuple(int(round(x + (y - x) * k)) for x, y in zip(a, b))
-
-
-def ease_io(p):
-    """Плавный старт и плавный финиш: 0..1 → 0..1 (smoothstep)."""
-    p = max(0.0, min(1.0, p))
-    return p * p * (3 - 2 * p)
-
-
-def sweep_lengths(w, h, p):
-    """Полоска расходится от середины низа: по обе стороны — вдоль низа к углам, вверх по боку,
-    потом над верхом к центру. p от 0 до 1. Возвращает освещённую длину на одной стороне:
-    (низ, бок, верх). Сумма путей по обе стороны от середины низа до середины верха — w + h."""
-    half = w / 2
-    d = max(0.0, min(1.0, p)) * (w + h)
-    return (min(d, half), min(max(d - half, 0.0), h), min(max(d - half - h, 0.0), half))
 
 
 def pulse(x, a, b):

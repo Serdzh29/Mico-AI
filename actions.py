@@ -12,7 +12,6 @@ CAPS = ("Вот что я умею (напиши команду в чат):\n"
         "👀 Смотреть на экран — «что у меня на экране?», «помоги ответить другу»\n"
         "🕐 Помнить, что ты делал — «что я делал час назад?»\n"
         "🚀 Программы и сайты — «открой блокнот, калькулятор и хром», «открой сайт apple.com», «закрой хром»\n"
-        "🔎 Поиск в интернете — «загугли рецепт борща»\n"
         "📡 Связь — «включи/выключи wi-fi», «блютуз», «режим полёта», «точка доступа»\n"
         "🔕 Режимы — «не беспокоить», «тёмная тема», «экономия заряда», «игровой режим», «скрытые файлы»\n"
         "🔊 Звук и экран — «громкость 30», «громче», «без звука», «яркость 50», «ярче», «следующий трек»\n"
@@ -28,9 +27,15 @@ CAPS = ("Вот что я умею (напиши команду в чат):\n"
 @dataclass
 class Reply:
     text: str = ""
-    mood: str = "idle"
+    mood: str = None          # None — эмоция по смыслу текста (emotions.for_reply)
     html: str = ""
     image: str = ""
+    copy_image: bool = False  # в буфер обмена — только для скриншота, картинки из поиска буфер не трогают
+
+    def __post_init__(self):
+        if self.mood is None:
+            import emotions
+            self.mood = emotions.for_reply(self.text)
 
 
 # ---------- скриншот ----------
@@ -41,7 +46,8 @@ def screenshot():
     with mss.mss() as s:
         shot = s.grab(s.monitors[0])
     Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX").save(path)
-    return Reply(f"Готово! Скриншот сохранён ({path}) и скопирован в буфер обмена 📸", "surprised", image=path)
+    return Reply(f"Готово! Скриншот сохранён ({path}) и скопирован в буфер обмена 📸", "surprised", image=path,
+                 copy_image=True)
 
 
 # ---------- напоминания ----------
@@ -55,19 +61,19 @@ def reminder(ql, notify):
     secs = n * (1 if unit.startswith("сек") else 60 if unit.startswith("мин") else 3600)
     import reminders
     reminders.add(text, time.time() + secs, notify)          # сохраняется и переживёт перезапуск
-    return Reply(f"Хорошо, напомню через {n} {unit}. ⏰", "happy")
+    return Reply(f"Хорошо, напомню через {n} {unit}. ⏰", None)
 
 
 # ---------- состояние ПК ----------
 def sysinfo(ql):
     if re.search(r"который час|сколько времени|какое (сегодня )?число|какой (сегодня )?день", ql):
         now = datetime.datetime.now()
-        return Reply(f"Сейчас {now:%H:%M}, {now:%d.%m.%Y} 🕒", "happy")
+        return Reply(f"Сейчас {now:%H:%M}, {now:%d.%m.%Y} 🕒", None)
     if re.search(r"заряд|батаре", ql):
         b = psutil.sensors_battery()
         if not b:
             return Reply("Не вижу батарею — наверное, это настольный ПК 🔌", "curious")
-        return Reply(f"Заряд {b.percent:.0f}% {'(заряжается ⚡)' if b.power_plugged else '(от батареи 🔋)'}", "happy")
+        return Reply(f"Заряд {b.percent:.0f}% {'(заряжается ⚡)' if b.power_plugged else '(от батареи 🔋)'}", None)
     if re.search(r"процессор|\bcpu\b|что грузит|нагрузк", ql):
         procs = list(psutil.process_iter(["name"]))
         for p in procs:

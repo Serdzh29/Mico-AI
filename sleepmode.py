@@ -2,7 +2,7 @@
 где спит и когда засыпает. Чистая логика без Qt — проверяется в tests/test_sleep.py."""
 import math
 
-SLEEP_SCALE = 0.42         # во сне Mico AI становится меньше в этом отношении
+SLEEP_SCALE = 0.62         # во сне Mico AI становится меньше, но не слишком: остаётся заметным
 CORNER_MARGIN = 6          # отступ от края экрана в углу, px
 DEFAULT_MINUTES = 3
 DEFAULT_CORNER = "br"
@@ -42,10 +42,10 @@ def corner_spot(avail, size, corner=DEFAULT_CORNER, margin=CORNER_MARGIN):
 
 
 def home_corner(asleep, placement, sleep_corner):
-    """Угол, где Mico AI стоит сейчас: во сне — выбранный для сна, иначе — выбранное положение.
-    None — Mico AI стоит там, где его поставил пользователь (мышкой)."""
+    """Где Mico AI стоит сейчас: во сне — внизу по центру экрана (SPOT), иначе — выбранное положение.
+    None — Mico AI стоит там, где его поставил пользователь (мышкой). sleep_corner оставлен для совместимости."""
     if asleep:
-        return sleep_corner if sleep_corner in CORNERS else DEFAULT_CORNER
+        return SPOT
     return placement if placement in CORNERS or placement == SPOT else None
 
 

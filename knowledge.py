@@ -57,12 +57,15 @@ def search(query, items, limit=1):
         title_words = _terms(it["title"])
         body_words = _terms(it["body"])
         score = 0
+        title_hit = False
         for t, stems in qvariants.items():
             if any(w.startswith(s) for w in title_words for s in stems if s):
                 score += 4
+                title_hit = True
             elif any(w.startswith(s) for w in body_words for s in stems if s):
                 score += 1
-        if score >= MIN_SCORE:
+        # совпадение только в тексте статьи («дела» в тексте про .NET) — не ответ: нужен заголовок
+        if score >= MIN_SCORE and title_hit:
             scored.append((score, it))
     scored.sort(key=lambda x: -x[0])
     return scored[:limit]

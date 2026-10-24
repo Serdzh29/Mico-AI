@@ -1,12 +1,16 @@
 """Мастер установки и удаление Mico. Работает только в собранном Mico.exe.
-Оформление в духе Mico AI: тёмная тема, персиковый акцент, без лишнего текста."""
-import json, os, shutil, subprocess, sys, time
+Оформление в духе Mico AI: тёмная тема, персиковый акцент, без лишнего текста.
+Тексты — через i18n.t(): мастер и удаление показываются на английском (см. i18n_installer_en.py)."""
+import json, os, random, shutil, subprocess, sys, time
 
-from PyQt6.QtCore import QEasingCurve, QThread, QVariantAnimation, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import QRectF, QEasingCurve, QThread, QVariantAnimation, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QPainter, QColor, QIcon, QPixmap
 from PyQt6.QtWidgets import (QCheckBox, QDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QMessageBox,
                              QProgressBar, QPushButton, QStackedWidget, QVBoxLayout, QWidget)
-from theme import FONT_FAMILY
+import i18n
+import theme
+from switch_ui import Switch, WrapCheck    # переключатели — как в настройках Mico AI
+from theme import FONT_FAMILY, FONT_DISPLAY
 
 FROZEN = bool(getattr(sys, "frozen", False))
 INSTALL_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "Programs", "Mico")
@@ -15,13 +19,14 @@ ICON_PATH = os.path.join(INSTALL_DIR, "mico.ico")
 APPDIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Mico")
 UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Mico"
 
+# Ключи — русские тексты; переводятся в момент показа (i18n.t), не при импорте модуля.
 STEPS = [
     ("Копирую Mico AI в папку программ", "curious"),
     ("Создаю ярлык на рабочем столе", "happy"),
     ("Настраиваю автозапуск", "thinking"),
     ("Регистрирую Mico AI в Windows", "thinking"),
     ("Сохраняю настройки", "happy"),
-    ("Проверяю Ollama для ответов", "curious"),
+    ("Готовлю ответы Mico AI", "curious"),
 ]
 
 
@@ -32,20 +37,82 @@ def should_run():
     return os.path.normcase(os.path.abspath(sys.executable)) != os.path.normcase(os.path.abspath(INSTALL_EXE))
 
 
-def render_mico(mood, size=150, color="#FFCFA3"):
-    """Картинка Mico AI в нужном настроении: assets/mico.png, если он есть, иначе Mico AI, нарисованный программой."""
-    custom = _asset("mico.png")
-    if custom:
-        return QPixmap(custom).scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio,
-                                      Qt.TransformationMode.SmoothTransformation)
-    from blob import Blob
-    b = Blob({"color": color, "scale": size / 240.0, "opacity": 1.0})
-    b.set_mood(mood, 999)
-    pix = QPixmap(b.width(), b.height())
-    pix.fill(Qt.GlobalColor.transparent)
-    b.render(pix)
-    b.deleteLater()
-    return pix
+# Что Mico AI рассказывает во время установки: (текст, настроение лица). Только то, что Mico умеет на самом деле.
+FACTS = [
+    ("Я Mico AI, компаньон для Windows. Живу на рабочем столе, и я рядом, пока ты работаешь.", "happy"),
+    ("Открываю программы и сайты одной фразой: «открой блокнот» или «открой ютуб».", "love"),
+    ("Громкость, яркость, Wi-Fi и Bluetooth: «громкость 30», «выключи Wi-Fi».", "laugh"),
+    ("Ставлю таймер и напоминания: «таймер на 10 минут», «напомни через час позвонить».", "curious"),
+    ("Переключаю больше 130 настроек Windows и объясню, что каждая из них делает.", "thinking"),
+    ("Если попросишь, посмотрю на экран: «что у меня на экране?».", "surprised"),
+    ("Опасные команды, например выключение компьютера, я сначала спрошу «да или нет».", "worried"),
+    ("Отвечаю на вопросы прямо на этом компьютере.", "curious"),
+    ("В голосовом режиме нажми на меня, и я обрадуюсь.", "happy"),
+    ("Ответы считаются прямо на твоём компьютере, без облака.", "thinking"),
+    ("Ты можешь сказать «запомни», и я сохраню заметку. Потом спросишь — и я вспомню.", "love"),
+    ("Скоро установка закончится. В меню Mico AI, по правому щелчку, есть всё, что я умею.", "happy"),
+]
+FACT_MS = 4800                       # сколько показывается один факт
+
+
+class MicoAvatar(QLabel):
+    """Mico AI в мастере установки и удаления. Рисуется программой, живой: моргает, дышит, и настроение
+    меняется плавно — старое лицо растворяется в новое за FADE_MS, а не прыгает."""
+    SIZE = 150
+    FRAME_MS = 33
+    FADE_MS = 520
+
+    def __init__(self, mood="happy", color="#FFCFA3"):
+        super().__init__()
+        from blob import Blob, BASE_PX
+        self.setMinimumSize(self.SIZE, self.SIZE)
+        self._blob = Blob({"color": color, "scale": self.SIZE / BASE_PX, "opacity": 1.0,
+                           "sleep_after_min": 3, "assist_style": "classic", "placement": "manual",
+                           "sleep_corner": "br", "anim_sleep_fps": 20})
+        self._blob.can_sleep = lambda: False                 # в установке Mico не засыпает
+        self._blob.timer.stop()                              # кадры двигаем сами, ниже
+        self._mood = mood
+        self._blob.set_mood(mood, 999)
+        self._old = None                                     # кадр прошлого настроения, пока он растворяется
+        self._fade = 1.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(self.FRAME_MS)
+        self._timer.timeout.connect(self._frame)
+        self._timer.start()
+        self._frame()
+
+    def set_mood(self, mood):
+        if mood == self._mood:
+            return
+        self._old = self._pixmap_now()
+        self._mood = mood
+        self._blob.set_mood(mood, 999)
+        self._fade = 0.0
+
+    def _pixmap_now(self):
+        pix = QPixmap(self._blob.width(), self._blob.height())
+        pix.fill(Qt.GlobalColor.transparent)
+        self._blob.render(pix)
+        return pix
+
+    def _frame(self):
+        self._blob.tick()
+        cur = self._pixmap_now()
+        if self._old is not None:
+            self._fade = min(1.0, self._fade + self.FRAME_MS / self.FADE_MS)
+            t = QEasingCurve(QEasingCurve.Type.InOutSine).valueForProgress(self._fade)
+            out = QPixmap(cur.size())
+            out.fill(Qt.GlobalColor.transparent)
+            p = QPainter(out)
+            p.setOpacity(1.0 - t)
+            p.drawPixmap(0, 0, self._old)
+            p.setOpacity(t)
+            p.drawPixmap(0, 0, cur)
+            p.end()
+            cur = out
+            if self._fade >= 1.0:
+                self._old = None
+        self.setPixmap(cur)
 
 
 def _asset(name):
@@ -67,47 +134,113 @@ def column(*items):
     return w
 
 
-ACCENT = "#FFCFA3"          # персиковый Mico AI: единый акцент мастера
+# Палитры в стиле Windows 11 (Fluent): нейтральные поверхности, акцент Windows, фон Mica там, где он есть.
+# Тёмная и светлая: какая нужна, решает тема Windows на этом ПК.
+_DARK = {
+    "bg": "#202020", "text": "#ffffff", "title": "#ffffff", "sub": "#c5c5c5", "step": "#8a8a8a",
+    "brand": "#ffffff", "accent": "#60cdff", "accent_text": "#000000", "accent_hover": "#7dd8ff",
+    "accent_off_bg": "rgba(255,255,255,0.06)", "accent_off_text": "#6e6e6e",
+    "ok": "#6ccb5f", "warn": "#fce100", "check": "#ffffff",
+    "box": "rgba(255,255,255,0.06)", "box_edge": "#8a8a8a",
+    "btn_bg": "rgba(255,255,255,0.06)", "btn_edge": "rgba(255,255,255,0.08)", "btn_text": "#ffffff",
+    "btn_hover": "rgba(255,255,255,0.09)", "btn_press": "rgba(255,255,255,0.04)",
+    "btn_off": "#6e6e6e", "bar": "rgba(255,255,255,0.12)", "side_edge": "rgba(255,255,255,0.06)",
+}
+_LIGHT = {
+    "bg": "#f3f3f3", "text": "#1a1a1a", "title": "#1a1a1a", "sub": "#5c5c5c", "step": "#7a7a7a",
+    "brand": "#1a1a1a", "accent": "#005fb8", "accent_text": "#ffffff", "accent_hover": "#0067c0",
+    "accent_off_bg": "rgba(0,0,0,0.06)", "accent_off_text": "#9a9a9a",
+    "ok": "#0f7b0f", "warn": "#9d5d00", "check": "#1a1a1a",
+    "box": "#ffffff", "box_edge": "#8a8a8a",
+    "btn_bg": "#fbfbfb", "btn_edge": "#e5e5e5", "btn_text": "#1a1a1a",
+    "btn_hover": "#f6f6f6", "btn_press": "#f0f0f0",
+    "btn_off": "#a0a0a0", "bar": "rgba(0,0,0,0.10)", "side_edge": "rgba(0,0,0,0.06)",
+}
 
-QSS = f"""
-QDialog#wizard {{ background: #15131a; }}
-QFrame#side {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #221f2a, stop:1 #141218);
-              border-right: 1px solid #242130; }}
-QLabel {{ color: #e9e4dc; font-family: "{FONT_FAMILY}"; font-size: 13px; background: transparent; }}
-QLabel#title {{ font-size: 24px; font-weight: 600; color: #f6f1e8; }}
-QLabel#sub {{ color: #8d8697; font-size: 13px; }}
-QLabel#step {{ color: #6d6679; font-size: 11px; }}
-QLabel#brand {{ color: #cfc8d8; font-size: 15px; font-weight: 600; }}
-QLabel#percent {{ font-size: 44px; font-weight: 300; color: #f6f1e8; }}
-QLabel#ok {{ color: #9fd8a8; font-size: 13px; }}
-QLabel#warn {{ color: #d9a58a; font-size: 13px; }}
-QCheckBox {{ color: #ddd7cc; font-size: 13px; spacing: 12px; padding: 7px 0; }}
-QCheckBox::indicator {{ width: 18px; height: 18px; border-radius:8px; border: 1px solid #4a4556; background: #1d1b24; }}
-QCheckBox::indicator:checked {{ background: {ACCENT}; border: 1px solid {ACCENT}; }}
-QPushButton {{ font-family: "{FONT_FAMILY}"; font-size: 13px; padding: 9px 22px; border-radius:12px;
-              background: transparent; color: #b9b2c4; border: 1px solid #343040; }}
-QPushButton:hover {{ background: #221f2a; color: #f1ebe1; }}
-QPushButton:disabled {{ color: #4f4a5a; border-color: #26232e; }}
-QPushButton#primary {{ background: {ACCENT}; color: #1a1620; border: none; font-weight: 600; }}
-QPushButton#primary:hover {{ background: #ffdcb8; }}
-QPushButton#primary:disabled {{ background: #34303d; color: #7a7384; }}
-QProgressBar {{ background: #26232e; border: none; border-radius:8px; max-height: 6px; min-height: 6px; }}
-QProgressBar::chunk {{ background: {ACCENT}; border-radius:8px; }}
+
+def qss(dark=None):
+    """Стиль мастера установки и удаления. dark=None — как в Windows на этом ПК."""
+    if dark is None:
+        dark = theme.system_dark()
+    c = _DARK if dark else _LIGHT
+    Switch.ON, Switch.OFF = c["accent"], ("#4a4a4a" if dark else "#d1d1d6")   # переключатели — цвет установщика
+    # С Mica окно прозрачное: фон дорисовывает Windows. Без Mica (Windows 10) — сплошной цвет.
+    wizard_bg = "transparent" if theme.mica_supported() else c["bg"]
+    return f"""
+QDialog#wizard {{ background: {wizard_bg}; }}
+QFrame#side {{ background: transparent; border-right: 1px solid {c['side_edge']}; }}
+QLabel {{ color: {c['text']}; font-family: "{FONT_FAMILY}"; font-size: 13px; background: transparent; }}
+QLabel#title {{ font-family: "{FONT_DISPLAY}"; font-size: 26px; font-weight: 700; color: {c['title']}; }}
+QLabel#sub {{ color: {c['sub']}; font-size: 13px; }}
+QLabel#step {{ color: {c['step']}; font-size: 12px; }}
+QLabel#brand {{ font-family: "{FONT_DISPLAY}"; color: {c['brand']}; font-size: 16px; font-weight: 700; }}
+QLabel#percent {{ font-family: "{FONT_DISPLAY}"; font-size: 44px; font-weight: 700; color: {c['title']}; }}
+QLabel#ok {{ color: {c['ok']}; font-size: 13px; }}
+QLabel#warn {{ color: {c['warn']}; font-size: 13px; }}
+QCheckBox {{ color: {c['check']}; font-size: 13px; spacing: 12px; padding: 6px 0; }}
+QCheckBox::indicator {{ width: 18px; height: 18px; border-radius: 4px; border: 1px solid {c['box_edge']}; background: {c['box']}; }}
+QCheckBox::indicator:checked {{ background: {c['accent']}; border: 1px solid {c['accent']}; }}
+QPushButton {{ font-family: "{FONT_FAMILY}"; font-size: 13px; padding: 7px 20px; border-radius: 4px;
+              background: {c['btn_bg']}; color: {c['btn_text']}; border: 1px solid {c['btn_edge']}; }}
+QPushButton:hover {{ background: {c['btn_hover']}; }}
+QPushButton:pressed {{ background: {c['btn_press']}; }}
+QPushButton:disabled {{ color: {c['btn_off']}; }}
+QPushButton#primary {{ font-family: "{FONT_FAMILY}"; background: {c['accent']}; color: {c['accent_text']};
+                      border: 1px solid {c['accent']}; font-weight: 700; }}
+QPushButton#primary:hover {{ background: {c['accent_hover']}; }}
+QPushButton#primary:disabled {{ background: {c['accent_off_bg']}; color: {c['accent_off_text']}; border: none; }}
+QProgressBar {{ background: {c['bar']}; border: none; border-radius: 2px; max-height: 4px; min-height: 4px; }}
+QProgressBar::chunk {{ background: {c['accent']}; border-radius: 2px; }}
 """
 
 
+class StepDots(QWidget):
+    """Индикатор шагов: точки, текущий шаг — вытянутая акцентная таблетка. Цвет берётся из палитры мастера."""
+
+    def __init__(self, count, parent=None):
+        super().__init__(parent)
+        self.count = count
+        self.current = 0
+        self.setFixedHeight(10)
+        self.setMinimumWidth(count * 22)
+
+    def set_current(self, i):
+        self.current = max(0, min(self.count - 1, i))
+        self.update()
+
+    def paintEvent(self, e):
+        dark = theme.system_dark()
+        c = _DARK if dark else _LIGHT
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        x = 0
+        for i in range(self.count):
+            if i == self.current:
+                p.setBrush(QColor(c["accent"]))
+                p.drawRoundedRect(QRectF(x, 2, 20, 6), 3, 3)
+                x += 28
+            else:
+                p.setBrush(QColor(c["box_edge"]))
+                p.drawEllipse(QRectF(x + 2, 2, 6, 6))
+                x += 14
+        p.end()
+
+
 class Wizard(QDialog):
-    PAGE_STEP = {0: "", 1: "Шаг 1 из 2", 2: "Установка", 3: ""}
+    PAGE_STEP = {0: "", 1: "Шаг 1 из 2", 2: "Установка", 3: ""}     # переводятся в _go()
     PAGE_MOOD = {0: "happy", 1: "curious", 2: "thinking", 3: "love"}
 
     def __init__(self):
         super().__init__()
         self.setObjectName("wizard")
-        self.setWindowTitle("Установка Mico AI")
-        self.setFixedSize(700, 440)
+        self.setWindowTitle(i18n.t("Установка Mico AI"))
+        self.setFixedSize(700, 480)              # третий вариант модели не должен обрезаться
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowIcon(QIcon(_asset("mico.ico") or ""))
-        self.setStyleSheet(QSS)
+        self.setStyleSheet(qss())
+        if theme.mica_supported():
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.ollama_ok = _ollama_present()
 
         root = QHBoxLayout(self)
@@ -121,7 +254,7 @@ class Wizard(QDialog):
         sv = QVBoxLayout(side)
         sv.setContentsMargins(0, 0, 0, 36)
         sv.addStretch()
-        self.avatar = QLabel()
+        self.avatar = MicoAvatar(self.PAGE_MOOD[0])
         self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand = QLabel("Mico AI")
         brand.setObjectName("brand")
@@ -136,19 +269,18 @@ class Wizard(QDialog):
         right = QVBoxLayout()
         right.setContentsMargins(40, 34, 40, 30)
         right.setSpacing(0)
-        self.step_lbl = QLabel("")
-        self.step_lbl.setObjectName("step")
+        self.step_lbl = StepDots(4)                      # точки шагов: 4 экрана
         right.addWidget(self.step_lbl)
-        right.addSpacing(10)
+        right.addSpacing(22)
         self.pages = QStackedWidget()
         for page in (self._page_welcome(), self._page_options(), self._page_install(), self._page_finish()):
             self.pages.addWidget(page)
         right.addWidget(self.pages, 1)
 
         row = QHBoxLayout()
-        self.cancel_b = QPushButton("Отмена")
-        self.back_b = QPushButton("Назад")
-        self.next_b = QPushButton("Далее")
+        self.cancel_b = QPushButton(i18n.t("Отмена"))
+        self.back_b = QPushButton(i18n.t("Назад"))
+        self.next_b = QPushButton(i18n.t("Далее"))
         self.next_b.setObjectName("primary")
         self.cancel_b.clicked.connect(self.reject)
         self.back_b.clicked.connect(lambda: self._go(self.pages.currentIndex() - 1))
@@ -162,14 +294,20 @@ class Wizard(QDialog):
         root.addLayout(right, 1)
         self._go(0)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not getattr(self, "_mica_done", False):
+            self._mica_done = True
+            theme.apply_mica(self)
+
     # ---------- страницы ----------
     def _title(self, text):
-        t = QLabel(text)
+        t = QLabel(i18n.t(text))
         t.setObjectName("title")
         return t
 
     def _sub(self, text):
-        s = QLabel(text)
+        s = QLabel(i18n.t(text))
         s.setObjectName("sub")
         s.setWordWrap(True)
         return s
@@ -183,23 +321,89 @@ class Wizard(QDialog):
                       self._sub("Займёт около минуты."))
 
     def _page_options(self):
-        self.opt_auto = QCheckBox("Запускать вместе с Windows")
+        self.opt_auto = WrapCheck(i18n.t("Запускать вместе с Windows"))
         self.opt_auto.setChecked(True)
-        self.opt_short = QCheckBox("Ярлык на рабочем столе")
+        self.opt_short = WrapCheck(i18n.t("Ярлык на рабочем столе"))
         self.opt_short.setChecked(True)
-        if self.ollama_ok:
-            self.ollama_lbl = QLabel("✓ Ollama найдена, ответы будут работать")
-            self.ollama_lbl.setObjectName("ok")
+        self.model_entry, self.ollama_model = None, None
+        builtin = self._builtin_available()
+        light, heavy = self._model_pair(builtin)
+        rows = [self._title("Параметры"), 14, self.opt_auto, self.opt_short]
+        self.opt_model = None
+        if builtin:                                  # встроенный движок: модель можно скачать прямо сейчас
+            self.opt_model = WrapCheck(i18n.t("Скачать выбранную модель для ответов сейчас"))
+            self.opt_model.setChecked(True)
+            rows.append(self.opt_model)
+        rows += [18, self._model_choice(builtin, light, heavy)]
+        return column(*rows)
+
+    @staticmethod
+    def _builtin_available():
+        """Встроенный движок (llama-cpp) установлен: модели Mico работают без Ollama."""
+        try:
+            import local_llm
+            return local_llm.available()
+        except Exception:
+            return False
+
+    @staticmethod
+    def _model_pair(builtin):
+        """Лёгкая и мощная модель под память этого ПК."""
+        import model_catalog
+        try:
+            import psutil
+            ram = psutil.virtual_memory().total / (1024 ** 3)
+        except Exception:
+            ram = 8.0
+        return model_catalog.pair_for(ram, None if builtin else model_catalog.OLLAMA_TIERS)
+
+    def _model_choice(self, builtin, light, heavy):
+        """Два варианта: мощная и лёгкая. Рекомендованная для памяти выбрана сразу, второй можно выбрать вместо неё."""
+        from PyQt6.QtWidgets import QButtonGroup, QRadioButton
+        import model_catalog
+        box = QWidget()
+        v = QVBoxLayout(box)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(2)
+        head = QLabel(i18n.t("Какую модель использовать для ответов?"))
+        head.setWordWrap(True)
+        v.addWidget(head)
+        v.addSpacing(6)
+        group = QButtonGroup(box)
+        options = [(heavy, True)] + ([(light, False)] if light["id"] != heavy["id"] else [])
+        alt = model_catalog.by_id("gemma-3-4b-q4") if builtin else None   # ручной вариант: не подбирается сам
+        if alt is not None and alt["id"] not in (heavy["id"], light["id"]):
+            options.append((alt, None))
+        for entry, is_heavy in options:
+            if is_heavy is None:
+                kind = i18n.t("Альтернатива")
+            else:
+                kind = i18n.t("Мощная") if is_heavy else i18n.t("Лёгкая")
+            is_heavy = bool(is_heavy)
+            # название коротким — в одну строку; пояснение — отдельной строкой под ним, с переносом, без обрезки
+            rb = QRadioButton(f"{kind}: {entry['title']} ({entry['quant']}, около {entry['size_gb']} ГБ)")
+            rb.setChecked(is_heavy)
+            rb.toggled.connect(lambda on, e=entry: on and self._choose_model(e, builtin))
+            group.addButton(rb)
+            v.addWidget(rb)
+            hint = QLabel(i18n.t(entry.get("hint") or entry["note"]))
+            hint.setObjectName("sub")
+            hint.setWordWrap(True)
+            hint.setContentsMargins(24, 0, 0, 8)
+            v.addWidget(hint)
+        if not builtin:
+            tail = QLabel(i18n.t("Модель скачается через Ollama после установки: ⚙ Настройки → Модели."))
+            tail.setObjectName("hint")
+            tail.setWordWrap(True)
+            v.addWidget(tail)
+        self._choose_model(heavy, builtin)
+        return box
+
+    def _choose_model(self, entry, builtin):
+        if builtin:
+            self.model_entry, self.ollama_model = entry, None
         else:
-            self.ollama_lbl = QLabel("Для ответов нужна Ollama. Установи её один раз, модели Mico AI скачает сам.")
-            self.ollama_lbl.setObjectName("warn")
-        self.ollama_lbl.setWordWrap(True)
-        ob = QPushButton("Открыть страницу Ollama")
-        ob.clicked.connect(lambda: os.startfile("https://ollama.com/download"))
-        ob.setFixedWidth(230)
-        return column(self._title("Параметры"), 14,
-                      self.opt_auto, self.opt_short, 18,
-                      self.ollama_lbl, 10, ob)
+            self.model_entry, self.ollama_model = None, entry["id"]
 
     def _page_install(self):
         self.percent = QLabel("0%")
@@ -207,13 +411,34 @@ class Wizard(QDialog):
         self.bar = QProgressBar()
         self.bar.setRange(0, 100)
         self.bar.setTextVisible(False)
-        self.status = QLabel("Готовлюсь…")
+        self.status = QLabel(i18n.t("Готовлюсь…"))
         self.status.setObjectName("sub")
         self.status.setWordWrap(True)
-        return column(self._title("Устанавливаю"), 18, self.percent, 12, self.bar, 14, self.status)
+        self.dl = QLabel("")                                   # счётчик скачивания модели: всегда виден, пока качается
+        self.dl.setObjectName("sub")
+        self.dl.setWordWrap(True)
+        self.dl.setVisible(False)
+        self.talk = QLabel("")                                 # Mico рассказывает о себе
+        self.talk.setObjectName("sub")
+        self.talk.setWordWrap(True)
+        self.talk.setMinimumHeight(56)
+        self._talk_order = list(range(len(FACTS)))
+        random.shuffle(self._talk_order)                       # каждый раз в другом порядке
+        self._talk_i = 0
+        self._talk_timer = QTimer(self)
+        self._talk_timer.setInterval(FACT_MS)
+        self._talk_timer.timeout.connect(self._say_next)
+        return column(self._title("Устанавливаю"), 18, self.percent, 12, self.bar, 8, self.dl, 14, self.status, 8, self.talk)
+
+    def _say_next(self):
+        """Следующий факт о Mico AI: текст и лицо меняются вместе."""
+        text, mood = FACTS[self._talk_order[self._talk_i % len(FACTS)]]
+        self._talk_i += 1
+        self.talk.setText(i18n.t(text))
+        self.avatar.set_mood(mood)
 
     def _page_finish(self):
-        self.run_cb = QCheckBox("Запустить Mico AI")
+        self.run_cb = WrapCheck(i18n.t("Запустить Mico AI"))
         self.run_cb.setChecked(True)
         return column(self._title("Готово"), 10,
                       self._sub("Mico AI установлен и готов к работе."), 20,
@@ -222,12 +447,12 @@ class Wizard(QDialog):
     # ---------- переходы ----------
     def _go(self, i):
         self.pages.setCurrentIndex(i)
-        self.step_lbl.setText(self.PAGE_STEP[i])
+        self.step_lbl.set_current(i)
         self.back_b.setVisible(i == 1)
-        self.next_b.setText({0: "Далее", 1: "Установить", 2: "…", 3: "Закрыть"}[i])
+        self.next_b.setText({0: i18n.t("Далее"), 1: i18n.t("Установить"), 2: "…", 3: i18n.t("Закрыть")}[i])
         self.next_b.setEnabled(i != 2)
         self.cancel_b.setVisible(i != 3)
-        self.avatar.setPixmap(render_mico(self.PAGE_MOOD[i], 150))
+        self.avatar.set_mood(self.PAGE_MOOD[i])
 
     def _next(self):
         i = self.pages.currentIndex()
@@ -246,8 +471,11 @@ class Wizard(QDialog):
     def _start_install(self):
         self._worker = _Worker(self)
         self._worker.progress.connect(self._on_progress)
+        self._worker.download.connect(self._on_download)
         self._worker.done.connect(self._on_done)
         self._worker.start()
+        self._say_next()                                       # первый факт сразу, потом — по таймеру
+        self._talk_timer.start()
 
     def _animate_to(self, target, ms, after=None):
         """Полоска и проценты плавно едут к target. Новый вызов отменяет предыдущий ход."""
@@ -283,22 +511,28 @@ class Wizard(QDialog):
         self._fade_anim = anim
         anim.start()
 
+    def _on_download(self, done_mb, total_mb):
+        self.dl.setText(i18n.t("Скачано {done} из {total} МБ").format(done=done_mb, total=total_mb))
+        self.dl.setVisible(True)
+
     def _on_progress(self, pct, text, mood):
         self.status.setText(text)
-        self.avatar.setPixmap(render_mico(mood, 150))
+        if mood:                                         # пустое настроение — лицо ведут факты, не полоска
+            self.avatar.set_mood(mood)
         self._animate_to(pct, 620)
 
     def _on_done(self, err):
+        self._talk_timer.stop()
         if err:
-            self.status.setText(f"Не получилось: {err}. Если Mico AI открыт, закрой его и запусти установку снова.")
+            self.status.setText(i18n.t("Не получилось: {err}. Если Mico AI открыт, закрой его и запусти установку снова.").format(err=err))
             self.next_b.setEnabled(True)
-            self.next_b.setText("Закрыть")
+            self.next_b.setText(i18n.t("Закрыть"))
             self.next_b.clicked.disconnect()
             self.next_b.clicked.connect(self.reject)
             return
         def finish():                                    # полоска дошла до 100% — даём её увидеть и переходим
             QTimer.singleShot(260, lambda: (self._go(3), self._fade_pages()))
-        self.status.setText("Готово")
+        self.status.setText(i18n.t("Готово"))
         self._animate_to(100, 520, after=finish)
 
 
@@ -314,22 +548,90 @@ def _install_steps(wizard, report):
     report(1)
     if wizard.opt_short.isChecked():
         _desktop_shortcut(create=True)
+    try:
+        _start_menu_shortcut(create=True)        # в списке приложений «Пуск», откуда Mico можно удалить
+    except Exception:
+        pass
     report(2)
     auto_on = False
     if wizard.opt_auto.isChecked():
         auto_on, msg = autostart.install(exe=INSTALL_EXE)
         if not auto_on:
-            report(2, "не получилось, включи позже в настройках")
+            report(2, i18n.t("не получилось, включи позже в настройках"))
     report(3)
     _register_uninstall()
     report(4)
-    _save_settings(auto_on)                                  # записываем то, что реально получилось, а не то, что выбрали
-    report(5)
+    entry = getattr(wizard, "model_entry", None)             # модель под память ПК, если встроенный движок есть
+    _save_settings(auto_on, model_entry=entry, ollama_model=getattr(wizard, "ollama_model", None))               # записываем то, что реально получилось, а не то, что выбрали
+    if entry is not None and getattr(wizard, "opt_model", None) is not None and wizard.opt_model.isChecked():
+        report(5, i18n.t("скачиваю {title}").format(title=entry["title"]))
+        worker = getattr(wizard, "_worker", None)
+        def make_show(lo, hi, title):
+            """Полоска идёт от lo% до hi% вместе со скачиванием одной модели (с проектором, если он есть)."""
+            last = {"mb": -1, "t": 0.0}
+
+            def show(done, total):
+                if worker is None or not total:
+                    return
+                # строка с мегабайтами обновляется по мере скачивания (раз в полсекунды или на каждый новый МБ),
+                # а не только когда сдвинулся общий процент — иначе на медленной сети она кажется замершей
+                mb = done // 1024 ** 2
+                now = time.monotonic()
+                if mb == last["mb"] and now - last["t"] < 0.5:
+                    return
+                last["mb"], last["t"] = mb, now
+                pct = int(lo + (hi - lo) * min(done, total) / total)
+                text = i18n.t("Готовлю ответы Mico AI — скачиваю {title}").format(title=title)
+                worker.progress.emit(min(pct, 99), text, "")      # "" — лицо не меняем: его ведут факты о Mico
+                worker.download.emit(mb, total // 1024 ** 2)
+            return show
+        # Короткие таймауты: если сервер не отвечает, установка не виснет, а идёт дальше.
+        got = _download_model(entry, make_show(83, 92, entry["title"]), retries=2, timeout=15)
+        if not got and worker is not None:
+            worker.progress.emit(83, i18n.t("Модель не скачалась сейчас, скачаю позже в настройках"), "worried")
+        else:
+            vision = _vision_entry_for(entry)
+            if vision is not None:                           # модель для экрана — тоже без Ollama, с полоской
+                _download_model(vision, make_show(92, 99, vision["title"]), retries=2, timeout=15)
+    else:
+        report(5)
+
+
+def _builtin_entry():
+    """Модель под память этого ПК для встроенного движка (без Ollama). None — движок не установлен."""
+    try:
+        import local_llm, model_catalog
+        if not local_llm.available():
+            return None
+        import psutil
+        return model_catalog.recommend(psutil.virtual_memory().total / (1024 ** 3))
+    except Exception:
+        return None
+
+
+def _vision_entry_for(text_entry):
+    """Модель для экрана под эту машину; None — не нужна (памяти мало)."""
+    try:
+        import model_catalog, psutil
+        return model_catalog.recommend_vision(psutil.virtual_memory().total / (1024 ** 3))
+    except Exception:
+        return None
+
+
+def _download_model(entry, show=None, retries=3, timeout=30):
+    """Скачивает модель из каталога. True — файл на месте. Ошибка сети не валит установку.
+    show(скачано_байт, всего_байт) — вызывается с прогрессом, чтобы окно не висело молча."""
+    try:
+        import model_store
+        return model_store.download(entry["id"], progress=show, retries=retries, timeout=timeout)
+    except Exception:
+        return False
 
 
 class _Worker(QThread):
     """Установка в фоне, чтобы окно не зависало."""
     progress = pyqtSignal(int, str, str)
+    download = pyqtSignal(int, int)                      # скачано МБ, всего МБ — для счётчика на экране
     done = pyqtSignal(str)
 
     def __init__(self, wizard):
@@ -341,7 +643,8 @@ class _Worker(QThread):
             if i:
                 time.sleep(0.45)                         # шаги идут не мгновенно: прогресс успевает быть видным
             text, mood = STEPS[i]
-            self.progress.emit(int(i / len(STEPS) * 100), text + (f" — {extra}" if extra else ""), mood)
+            self.progress.emit(int(i / len(STEPS) * 100),
+                               i18n.t(text) + (f" — {extra}" if extra else ""), mood)
         try:
             _install_steps(self.wizard, report)
             self.done.emit("")
@@ -349,9 +652,10 @@ class _Worker(QThread):
             self.done.emit(f"{e.__class__.__name__}: {e}")
 
 
-def _desktop_shortcut(create):
+def _shortcut(folder, create):
+    """Ярлык Mico AI. folder='Desktop' — на рабочем столе; 'Programs' — в меню «Пуск → Все приложения»."""
     import winctl
-    path = "[Environment]::GetFolderPath('Desktop')+'\\Mico.lnk'"
+    path = f"[Environment]::GetFolderPath('{folder}')+'\\Mico.lnk'"
     if create:
         icon_ps = f"$s.IconLocation='{ICON_PATH}';" if os.path.exists(ICON_PATH) else ""
         ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut({path});"
@@ -361,15 +665,16 @@ def _desktop_shortcut(create):
     winctl.ps(ps, timeout=30)
 
 
+def _desktop_shortcut(create):
+    _shortcut("Desktop", create)
+
+
+def _start_menu_shortcut(create):
+    """Без этого ярлыка Mico AI не видно в «Пуск → Все приложения», а удалить его оттуда нельзя."""
+    _shortcut("Programs", create)
+
+
 REMOVER_PATH = os.path.join(INSTALL_DIR, "remove_mico.cmd")
-
-
-def _write_remover():
-    """Скрипт удаления рядом с программой: работает, даже если Mico.exe сам не запускается."""
-    import remover
-    os.makedirs(INSTALL_DIR, exist_ok=True)
-    with open(REMOVER_PATH, "w", encoding="ascii", newline="") as f:
-        f.write(remover.script(INSTALL_DIR, APPDIR))
 
 
 def _register_uninstall():
@@ -403,6 +708,13 @@ def refresh_uninstall_entry():
         current = None
     if current != expected:
         _register_uninstall()
+    lnk = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Microsoft", "Windows",
+                       "Start Menu", "Programs", "Mico.lnk")
+    if not os.path.exists(lnk):                 # установки до этого обновления не имели ярлыка в «Пуск»
+        try:
+            _start_menu_shortcut(create=True)
+        except Exception:
+            pass
     if os.path.exists(REMOVER_PATH):
         try:
             os.remove(REMOVER_PATH)
@@ -412,6 +724,10 @@ def refresh_uninstall_entry():
 
 def _unregister_uninstall():
     import winreg
+    try:
+        _start_menu_shortcut(create=False)       # пункт в «Пуск → Все приложения» не должен остаться после удаления
+    except Exception:
+        pass
     try:
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY)
     except OSError:
@@ -429,7 +745,7 @@ def _ollama_present():
         return False
 
 
-def _save_settings(autostart_on):
+def _save_settings(autostart_on, model_entry=None, ollama_model=None):
     """Минимальные настройки для первого запуска. Остальное — значения по умолчанию в программе."""
     os.makedirs(APPDIR, exist_ok=True)
     path = os.path.join(APPDIR, "config.json")
@@ -438,7 +754,12 @@ def _save_settings(autostart_on):
     except (OSError, ValueError):
         cfg = {}
     import version
-    cfg.update(autostart=autostart_on, greet_on_start=True, update_channel=version.BUILD_CHANNEL)
+    cfg.update(autostart=autostart_on, greet_on_start=True, update_channel=version.BUILD_CHANNEL,
+               language=i18n.LANG)                # язык, выбранный в мастере, становится языком программы
+    if model_entry is not None:                   # встроенный движок: ответы без Ollama, модель под память ПК
+        cfg.update(llm_backend="builtin", text_model=model_entry["id"])
+    elif ollama_model:                            # Ollama: модель, которую выбрал человек, докачивается в настройках
+        cfg.update(llm_backend="ollama", text_model=ollama_model)
     cfg.setdefault("last_version", _version())            # не показывать «что нового» сразу после установки
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
@@ -449,9 +770,42 @@ def _version():
     return version.APP_VERSION
 
 
-# ============================ Бета-программа ============================
+# ============================ Мастер установки ============================
+def pick_language(default):
+    """Окно выбора языка перед мастером: English или Русский. Возвращает код языка или None, если закрыли окно."""
+    dlg = QDialog()
+    dlg.setObjectName("wizard")
+    dlg.setWindowTitle("Mico AI")
+    dlg.setFixedSize(420, 220)
+    dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
+    dlg.setWindowIcon(QIcon(_asset("mico.ico") or ""))
+    dlg.setStyleSheet(qss())
+    lay = QVBoxLayout(dlg)
+    lay.setContentsMargins(36, 34, 36, 30)
+    title = QLabel("Choose your language")
+    title.setObjectName("title")
+    lay.addWidget(title)
+    lay.addWidget(QLabel("Выберите язык"))
+    lay.addSpacing(22)
+    row = QHBoxLayout()
+    chosen = {"code": None}
+    for code, label in (("en", "English"), ("ru", "Русский")):
+        b = QPushButton(label)
+        if code == default:
+            b.setObjectName("primary")       # язык, который уже выбран в программе, подсвечен
+        b.clicked.connect(lambda _=False, c=code: (chosen.update(code=c), dlg.accept()))
+        row.addWidget(b)
+    lay.addLayout(row)
+    dlg.exec()
+    return chosen["code"]
+
+
 def run():
     """Мастер установки. Возвращает после закрытия; установленная копия запускается сама."""
+    code = pick_language("en")               # сначала выбор языка, потом весь мастер на нём
+    if not code:
+        return
+    i18n.set_language(code)
     dlg = Wizard()
     dlg.exec()
 
@@ -510,7 +864,7 @@ class _Remover(QThread):
         if self.choices.get("shortcut"):
             steps.append(("shortcut", "Удаляю ярлык на рабочем столе", self._shortcut))
         if self.choices.get("ollama") and self.ollama_names:
-            steps.append(("ollama", "Удаляю модели Ollama", self._ollama))
+            steps.append(("ollama", "Удаляю модели Mico AI", self._ollama))
         steps.append(("program", "Убираю запись из «Приложений» Windows", _unregister_uninstall))
         return steps
 
@@ -530,11 +884,11 @@ class _Remover(QThread):
                 if r.returncode != 0:
                     bad.append(name)
             except FileNotFoundError:
-                raise RuntimeError("Ollama не найдена, модели не тронуты")
+                raise RuntimeError(i18n.t("Движок не найден, модели не тронуты"))
             except Exception:
                 bad.append(name)
         if bad:
-            raise RuntimeError("не удалось удалить " + ", ".join(bad))
+            raise RuntimeError(i18n.t("не удалось удалить {names}").format(names=", ".join(bad)))
 
     def run(self):
         steps = self._steps()
@@ -542,13 +896,13 @@ class _Remover(QThread):
             for i, (key, text, fn) in enumerate(steps):
                 if i:
                     time.sleep(0.45)                     # шаги видны, а не мелькают
-                self.progress.emit(int(i / len(steps) * 100), text)
+                self.progress.emit(int(i / len(steps) * 100), i18n.t(text))
                 try:
                     fn()
                 except Exception as e:
                     self.failed.add(key)
-                    self.errors.append(f"{text} ({e})")
-            self.progress.emit(100, "Почти готово")
+                    self.errors.append(f"{i18n.t(text)} ({e})")
+            self.progress.emit(100, i18n.t("Почти готово"))
             self.done.emit("")
         except Exception as e:
             self.done.emit(f"{e.__class__.__name__}: {e}")
@@ -564,10 +918,12 @@ class Uninstaller(QDialog):
         self.worker = None
         self.ollama_names = _mico_ollama_models()
         self.setObjectName("wizard")
-        self.setWindowTitle("Удаление Mico AI")
+        self.setWindowTitle(i18n.t("Удаление Mico AI"))
         self.setFixedSize(700, 480)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
-        self.setStyleSheet(QSS)
+        self.setStyleSheet(qss())
+        if theme.mica_supported():
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -578,7 +934,7 @@ class Uninstaller(QDialog):
         sv = QVBoxLayout(side)
         sv.setContentsMargins(0, 0, 0, 36)
         sv.addStretch()
-        self.avatar = QLabel()
+        self.avatar = MicoAvatar("worried")
         self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand = QLabel("Mico AI")
         brand.setObjectName("brand")
@@ -592,9 +948,9 @@ class Uninstaller(QDialog):
         right = QVBoxLayout()
         right.setContentsMargins(40, 34, 40, 30)
         right.setSpacing(0)
-        self.step_lbl = QLabel("Удаление")
-        self.step_lbl.setObjectName("step")
+        self.step_lbl = StepDots(3)                      # точки шагов: выбор, прогресс, итог
         right.addWidget(self.step_lbl)
+        right.addSpacing(22)
         right.addSpacing(10)
         self.pages = QStackedWidget()
         self.pages.addWidget(self._page_choose())
@@ -603,9 +959,9 @@ class Uninstaller(QDialog):
         right.addWidget(self.pages, 1)
 
         row = QHBoxLayout()
-        self.cancel_b = QPushButton("Отмена")
+        self.cancel_b = QPushButton(i18n.t("Отмена"))
         self.cancel_b.clicked.connect(self.reject)
-        self.next_b = QPushButton("Удалить")
+        self.next_b = QPushButton(i18n.t("Удалить"))
         self.next_b.setObjectName("primary")
         self.next_b.clicked.connect(self._start)
         row.addWidget(self.cancel_b)
@@ -618,13 +974,13 @@ class Uninstaller(QDialog):
 
     # ---------- страницы ----------
     def _choice(self, key, title, hint, checked):
-        box = QCheckBox(title)
+        box = WrapCheck(i18n.t(title))
         box.setChecked(checked)
         self.choices[key] = box
-        hint_lbl = QLabel(hint)
+        hint_lbl = QLabel(i18n.t(hint))
         hint_lbl.setObjectName("sub")
         hint_lbl.setWordWrap(True)
-        hint_lbl.setContentsMargins(30, 0, 0, 6)
+        hint_lbl.setContentsMargins(0, 0, 0, 6)     # подсказка под подписью: галочки больше нет, отступ не нужен
         block = QWidget()
         lay = QVBoxLayout(block)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -632,6 +988,12 @@ class Uninstaller(QDialog):
         lay.addWidget(box)
         lay.addWidget(hint_lbl)
         return block
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not getattr(self, "_mica_done", False):
+            self._mica_done = True
+            theme.apply_mica(self)
 
     def _page_choose(self):
         self.choices = {}
@@ -645,11 +1007,13 @@ class Uninstaller(QDialog):
                                   "Чат, память и напоминания. Оставь, если переустановишь Mico AI с прежними данными.",
                                   False))
         if self.ollama_names:
-            items.append(self._choice("ollama", "Модели Ollama, которые использовал Mico AI",
-                                      "Их могут использовать другие программы. Удаляются командой ollama rm.",
+            items.append(self._choice("ollama", "Модели, которые скачал Mico AI",
+                                      "Их могут использовать другие программы. Удаление освобождает место на диске.",
                                       False))
         size = _dir_size_mb(INSTALL_DIR) if os.path.isdir(INSTALL_DIR) else 0
-        items += [14, self._sub(f"Программа Mico AI · {size} МБ")]
+        size_lbl = self._sub("Программа Mico AI · {size} МБ")
+        size_lbl.setText(size_lbl.text().format(size=size))
+        items += [14, size_lbl]
         return column(*items)
 
     def _page_progress(self):
@@ -658,7 +1022,7 @@ class Uninstaller(QDialog):
         self.bar = QProgressBar()
         self.bar.setRange(0, 100)
         self.bar.setTextVisible(False)
-        self.status = QLabel("Готовлюсь…")
+        self.status = QLabel(i18n.t("Готовлюсь…"))
         self.status.setObjectName("sub")
         self.status.setWordWrap(True)
         return column(self._title("Удаляю"), 18, self.percent, 12, self.bar, 14, self.status)
@@ -670,12 +1034,12 @@ class Uninstaller(QDialog):
         return column(self._title("Mico AI удалён"), 10, self.done_text)
 
     def _title(self, text):
-        t = QLabel(text)
+        t = QLabel(i18n.t(text))
         t.setObjectName("title")
         return t
 
     def _sub(self, text):
-        s = QLabel(text)
+        s = QLabel(i18n.t(text))
         s.setObjectName("sub")
         s.setWordWrap(True)
         return s
@@ -683,12 +1047,12 @@ class Uninstaller(QDialog):
     # ---------- переходы ----------
     def _go(self, i):
         self.pages.setCurrentIndex(i)
-        self.step_lbl.setText({0: "Удаление", 1: "Удаление", 2: "Готово"}[i])
+        self.step_lbl.set_current(i)
         self.cancel_b.setVisible(i == 0)
         self.next_b.setVisible(i != 2)
-        self.next_b.setText({0: "Удалить", 1: "…"}[i] if i != 2 else "")
+        self.next_b.setText({0: i18n.t("Удалить"), 1: "…"}[i] if i != 2 else "")
         self.next_b.setEnabled(i != 1)
-        self.avatar.setPixmap(render_mico({0: "thinking", 1: "curious", 2: "love"}[i], 150))
+        self.avatar.set_mood({0: "worried", 1: "sad", 2: "sad"}[i])     # при удалении Mico грустит
 
     def _fade_pages(self):
         effect = QGraphicsOpacityEffect(self.pages)
@@ -739,13 +1103,13 @@ class Uninstaller(QDialog):
 
     def _on_done(self, err):
         if err:
-            self.status.setText(f"Не получилось: {err}")
+            self.status.setText(i18n.t("Не получилось: {err}").format(err=err))
             self.next_b.setEnabled(True)
             return
 
         def finish():
             QTimer.singleShot(260, self._finish_removal)
-        self.status.setText("Готово")
+        self.status.setText(i18n.t("Готово"))
         self._animate_to(100, 520, after=finish)
 
     def _finish_removal(self):
@@ -764,21 +1128,22 @@ class Uninstaller(QDialog):
         if picked.get("data"):
             removed.append("история и настройки")
         if picked.get("ollama") and "ollama" not in failed:
-            removed.append("модели Ollama")
+            removed.append("модели Mico AI")
         kept = []
         if not picked.get("data"):
             kept.append("история и настройки в папке Mico AI (AppData)")
         if not picked.get("ollama") and self.ollama_names:
-            kept.append("модели Ollama")
-        text = "Удалено: " + ", ".join(removed) + "."
+            kept.append("модели Mico AI")
+        text = i18n.t("Удалено") + ": " + ", ".join(i18n.t(x) for x in removed) + "."
         if kept:
-            text += "\n\nОсталось по твоему выбору: " + ", ".join(kept) + "."
+            text += "\n\n" + i18n.t("Осталось по твоему выбору") + ": " + ", ".join(i18n.t(x) for x in kept) + "."
         if self.worker and self.worker.errors:
-            text += "\n\nНе получилось: " + "; ".join(self.worker.errors) + ". Можно повторить позже."
+            text += ("\n\n" + i18n.t("Не получилось") + ": " + "; ".join(self.worker.errors) + ". "
+                     + i18n.t("Можно повторить позже."))
         self.done_text.setText(text)
         self._go(2)
         self._fade_pages()
-        self.next_b.setText("Закрыть")
+        self.next_b.setText(i18n.t("Закрыть"))
         self.next_b.setVisible(True)
         self.next_b.setEnabled(True)
         self.next_b.clicked.disconnect()
@@ -799,11 +1164,19 @@ class Uninstaller(QDialog):
 def uninstall(app):
     """Мастер удаления: выбор, что удалить, плавный прогресс и итог. Возвращает True, если удаление выполнено."""
     if not FROZEN:
-        QMessageBox.information(None, "Mico AI", "Удаление доступно только для установленной версии Mico AI.")
+        QMessageBox.information(None, "Mico AI", i18n.t("Удаление доступно только для установленной версии Mico AI."))
         return False
-    dlg = Uninstaller(app)
-    dlg.exec()
-    return dlg.removed
+    previous = i18n.LANG
+    code = pick_language(previous)
+    if not code:
+        return False
+    i18n.set_language(code)                  # мастер удаления на выбранном языке; язык запущенной программы вернём после
+    try:
+        dlg = Uninstaller(app)
+        dlg.exec()
+        return dlg.removed
+    finally:
+        i18n.set_language(previous)
 
 
 def _schedule_file_removal(delete_data):

@@ -8,7 +8,7 @@ def explain_model_error(exc, model):
         return (f"Модель «{model}» думает слишком долго. Закрой тяжёлые программы или выбери модель поменьше "
                 "в ⚙ Настройки → Модели. Потом нажми «Повторить».")
     if isinstance(exc, requests.exceptions.ConnectionError):
-        return ("Не получилось загрузить модель: Ollama не запущена. Запусти её (значок в трее) "
+        return ("Не получилось загрузить модель: движок не запущен. Перезапусти Mico AI "
                 "и нажми «Повторить».")
     if isinstance(exc, requests.HTTPError) and getattr(exc.response, "status_code", None) == 404:
         return (f"Модели «{model}» нет на компьютере. Скачай её в ⚙ Настройки → Модели "
@@ -36,10 +36,10 @@ def ollama_probe(base, models):
             r = requests.get(base + "/api/tags", timeout=3)
             r.raise_for_status()
         except requests.RequestException:
-            return False, "Ollama не отвечает. Запусти её."
+            return False, "Движок моделей не отвечает. Перезапусти Mico AI."
         have = {m.get("name", "") for m in r.json().get("models", [])}
         missing = [m for m in models if m not in have]
         if missing:
-            return False, "не скачана: " + ", ".join(missing) + ". Выполни ollama pull <имя>"
+            return False, "не скачана: " + ", ".join(missing) + ". Скачай её в ⚙ Настройки → Модели."
         return True, ""
     return probe

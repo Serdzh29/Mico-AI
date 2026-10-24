@@ -1,5 +1,7 @@
 """Иконки интерфейса Mico AI: стрелка отправки и значки настроек. Рисуются штрихами, поэтому ровные в любом масштабе
 и подходят к цвету темы. Эмодзи не используем: на разных системах они выглядят по-разному."""
+import math
+
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 
@@ -152,6 +154,31 @@ def _drop(p):                                         # капля: цвет и 
     p.drawPath(path)
 
 
+def _palette(p):                                      # палитра художника: выбор цвета Mico AI
+    path = QPainterPath()
+    path.moveTo(9.0, 2.4)
+    path.cubicTo(4.4, 2.4, 2.4, 5.6, 2.4, 8.8)
+    path.cubicTo(2.4, 12.0, 5.0, 13.6, 7.0, 13.2)
+    path.cubicTo(8.4, 12.9, 8.2, 15.6, 10.6, 15.6)
+    path.cubicTo(13.9, 15.6, 15.6, 13.2, 15.6, 9.6)
+    path.cubicTo(15.6, 5.0, 12.8, 2.4, 9.0, 2.4)
+    p.drawPath(path)
+    for x, y in ((5.4, 7.2), (8.2, 4.8), (12.0, 5.4)):   # три краски
+        p.drawPoint(QPointF(x, y))
+
+
+def _speaker(p):                                      # динамик: озвучка ответов
+    p.drawPolyline([QPointF(3.0, 7.0), QPointF(6.0, 7.0), QPointF(10.0, 3.5), QPointF(10.0, 14.5),
+                    QPointF(6.0, 11.0), QPointF(3.0, 11.0)])
+    p.drawArc(QRectF(10.5, 5.5, 4.5, 7.0), -60 * 16, 120 * 16)
+
+
+def _mic(p):                                          # микрофон: голосовой ввод
+    p.drawRoundedRect(QRectF(6.5, 2.5, 5.0, 8.5), 2.5, 2.5)
+    p.drawArc(QRectF(4.0, 6.5, 10.0, 8.0), 180 * 16, 180 * 16)
+    p.drawLine(QPointF(9.0, 14.5), QPointF(9.0, 16.0))
+
+
 def _resize(p):                                       # уголки: размер и прозрачность
     for pts in (((2.5, 6.5), (2.5, 2.5), (6.5, 2.5)), ((11.5, 2.5), (15.5, 2.5), (15.5, 6.5)),
                 ((15.5, 11.5), (15.5, 15.5), (11.5, 15.5)), ((6.5, 15.5), (2.5, 15.5), (2.5, 11.5))):
@@ -220,13 +247,119 @@ def _download(p):                                     # стрелка в лот
     p.drawPolyline([QPointF(3.0, 12.5), QPointF(3.0, 15.0), QPointF(15.0, 15.0), QPointF(15.0, 12.5)])
 
 
+def _screen(p):                                       # экран с подставкой: Mico смотрит на экран
+    p.drawRoundedRect(QRectF(2.5, 3.0, 13.0, 9.5), 2.0, 2.0)
+    p.drawLine(QPointF(9.0, 12.5), QPointF(9.0, 15.0))
+    p.drawLine(QPointF(6.0, 15.0), QPointF(12.0, 15.0))
+
+
+def _tune(p):                                         # ползунки: быстрые настройки голоса
+    for y, x in ((5.0, 6.5), (9.0, 11.5), (13.0, 7.5)):
+        p.drawLine(QPointF(3.0, y), QPointF(15.0, y))
+        p.drawEllipse(QPointF(x, y), 1.6, 1.6)
+
+
+def _subs(p):                                         # субтитры: рамка с двумя строками текста
+    p.drawRoundedRect(QRectF(2.5, 4.0, 13.0, 10.0), 2.5, 2.5)
+    p.drawLine(QPointF(5.0, 8.0), QPointF(13.0, 8.0))
+    p.drawLine(QPointF(5.0, 11.0), QPointF(10.5, 11.0))
+
+
+def _mic_off(p):                                      # микрофон перечёркнут: микрофон выключен
+    _mic(p)
+    p.drawLine(QPointF(3.0, 3.0), QPointF(15.0, 15.0))
+
+
 _DRAW = {"chev_right": _chev_right, "chev_down": _chev_down, "chev_up": _chev_up, "look": _look, "general": _general, "functions": _functions, "models": _models,
          "privacy": _privacy, "close": _close, "moon": _moon, "bolt": _bolt, "search": _search,
          "drop": _drop, "resize": _resize, "frame": _frame, "bar": _bar, "power": _power, "history": _history,
          "menu": _menu, "pulse": _pulse, "chat": _chat, "buttons": _buttons, "sun": _sun,
-         "layers": _layers, "download": _download}
+         "layers": _layers, "download": _download, "palette": _palette, "speaker": _speaker, "mic": _mic, "mic_off": _mic_off, "screen": _screen, "tune": _tune, "subs": _subs}
 
 
 def icon(name, color, size=18):
     """Монохромная иконка по имени."""
     return _stroke_icon(_DRAW[name], color, size)
+
+
+def icon_frame(name, color, u, size=18):
+    """Кадр анимированной иконки в момент u (0…1). Это обычная иконка того же размера, что и неанимированная."""
+    return _stroke_icon(lambda p: paint_animated(name, p, u), color, size)
+
+
+# ---------- анимация иконок разделов настроек: u от 0 до 1, за один проход ----------
+def _anim_look(p, u):                                 # глаз моргает: веки опускаются и поднимаются
+    k = 1.0 - 0.92 * math.sin(math.pi * u)
+    p.save()
+    p.translate(9.0, 9.0)
+    p.scale(1.0, max(0.06, k))
+    p.translate(-9.0, -9.0)
+    _look(p)
+    p.restore()
+
+
+def _anim_general(p, u):                              # ползунки ездят туда-сюда, у каждого свой ритм
+    for i, (y, x) in enumerate(((4.5, 6.0), (9.0, 12.0), (13.5, 7.5))):
+        dx = 2.8 * math.sin(2 * math.pi * u + i * 1.9)
+        p.drawLine(QPointF(2.5, y), QPointF(15.5, y))
+        p.drawEllipse(QPointF(x + dx, y), 1.6, 1.6)
+
+
+def _anim_functions(p, u):                            # звёздочка искрит: поворачивается и пульсирует
+    k = 1.0 + 0.22 * math.sin(math.pi * u)
+    p.save()
+    p.translate(9.0, 9.0)
+    p.rotate(70 * math.sin(math.pi * u))
+    p.scale(k, k)
+    p.translate(-9.0, -9.0)
+    _functions(p)
+    p.restore()
+
+
+def _anim_speaker(p, u):                              # динамик «говорит»: звуковые волны по очереди
+    _speaker(p)
+    for i, (rect, start) in enumerate(((QRectF(12.2, 3.6, 3.6, 10.8), 0.15),      # волны внутри 18×18, не обрезаются
+                                        (QRectF(13.6, 1.9, 3.6, 14.2), 0.40))):
+        local = (u - start) / 0.45
+        if 0.0 <= local <= 1.0:
+            p.save()
+            p.setOpacity(math.sin(math.pi * local))
+            p.drawArc(rect, -60 * 16, 120 * 16)
+            p.restore()
+
+
+def _anim_models(p, u):                              # кубик подпрыгивает и поворачивается на 90°, мягко приземляясь
+    ease = u * u * (3.0 - 2.0 * u)
+    lift = -3.0 * math.sin(math.pi * u)
+    squash = 1.0 + 0.10 * math.sin(math.pi * u)
+    p.save()
+    p.translate(0.0, lift)
+    p.translate(9.0, 9.0)
+    p.rotate(120.0 * ease)                            # поворот на 120°: куб совпадает сам с собой, без скачка в конце
+    p.scale(squash, 2.0 - squash)
+    p.translate(-9.0, -9.0)
+    _models(p)
+    p.restore()
+
+
+def _anim_history(p, u):                              # часы: минутная стрелка делает один полный круг
+    p.drawEllipse(QPointF(9.0, 9.0), 6.5, 6.5)
+    p.drawLine(QPointF(9.0, 9.0), QPointF(11.2, 7.8))  # часовая стрелка стоит
+    p.save()
+    p.translate(9.0, 9.0)
+    p.rotate(360.0 * u)
+    p.drawLine(QPointF(0.0, 0.0), QPointF(0.0, -4.6))  # минутная стрелка
+    p.restore()
+
+
+ANIMATED = {"look": _anim_look, "general": _anim_general, "functions": _anim_functions,
+            "speaker": _anim_speaker, "models": _anim_models, "history": _anim_history}
+
+
+def paint_animated(name, p, u):
+    """Рисует иконку раздела в момент u анимации (0…1). Неанимированные иконки рисуются обычно."""
+    fn = ANIMATED.get(name)
+    if fn is None:
+        _DRAW[name](p)
+    else:
+        fn(p, max(0.0, min(1.0, float(u))))

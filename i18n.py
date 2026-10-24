@@ -5,16 +5,20 @@
 """
 
 import i18n_hints
+from i18n_installer_en import INSTALLER_EN
+from i18n_ui_en import UI_EN
 
-LANG = "ru"
-LANGUAGES = (("ru", "Русский"), ("en", "English"))
+LANG = "en"
+LANGUAGES = (("en", "English"), ("ru", "Русский"))
 
 EN = {
     # вкладки окна настроек
     "Вид": "Look",
-    "Основные": "General",
-    "Функции": "Features",
+    "Mico AI": "Mico AI",
+    "Чат и помощь": "Chat and help",
+    "Голос": "Voice",
     "Модели": "Models",
+    "Система": "System",
     # разделы
     "Цвет и тема": "Color and theme",
     "Размер и прозрачность": "Size and transparency",
@@ -43,11 +47,13 @@ EN = {
 
 
 EN.update(i18n_hints.EN_HINTS)          # описания настроек
+EN.update(INSTALLER_EN)                 # мастер установки и удаления
+EN.update(UI_EN)                        # главное окно, чат, настройки
 
 
 def set_language(code):
     global LANG
-    LANG = "en" if code == "en" else "ru"
+    LANG = "ru" if code == "ru" else "en"
 
 
 def t(text):

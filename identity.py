@@ -18,4 +18,4 @@ def answer(q):
         return None
     if not (_WHO.search(low) and _MAKE.search(low) and _ABOUT_MICO.search(low)):
         return None
-    return Reply(f"Меня создал {CREATOR} 💛", "happy")
+    return Reply(f"Меня создал {CREATOR} 💛", "happy")       # тёплый ответ о создателе — всегда с радостью

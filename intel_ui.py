@@ -8,20 +8,22 @@ import os
 import threading
 import time
 
-from PyQt6.QtCore import (QAbstractAnimation, QObject, Qt, QTimer, QRectF, QPoint, QPointF, QPropertyAnimation,
+from PyQt6.QtCore import (QAbstractAnimation, QObject, Qt, QTimer, QRectF, QPoint, QPointF, QPropertyAnimation, QVariantAnimation,
                           QEasingCurve, pyqtSignal)
-from PyQt6.QtGui import (QAction, QBrush, QColor, QGuiApplication, QLinearGradient, QPainter, QPainterPath)
-from PyQt6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton, QScrollArea, QToolButton,
-                             QVBoxLayout, QWidget)
+from PyQt6.QtGui import (QBrush, QColor, QGuiApplication, QLinearGradient, QPainter, QPainterPath)
+from PyQt6.QtWidgets import QFileDialog, QWidget
 
 import clipbuf
+import emotions
 import errhelp
 import errwatch
 import filereader
 import intel
 import sleepmode
 import theme
-from wichat import WiChat
+from voice_dock import VoiceDock
+from aichat import AIChat
+import voice_ctl
 
 
 def _window_flags():
@@ -167,6 +169,11 @@ class EdgeGlow(QWidget):
         self.phase += 0.05
         goal = 0.0 if self.muted else self.target          # во сне всё гаснет, не меняя цели
         self.level = intel.approach(self.level, goal)
+        if self.muted and self.level < 0.02:                # во сне полоски полностью пропадают
+            self.level = 0.0
+            self.timer.stop()
+            self.hide()
+            return
         self.rgb = intel.lerp_rgb(self.rgb, self.target_rgb, 1 - math.exp(-dt * 6))   # цвет плавно сменяется
         want_wave = now < self.wave_until and intel.waves_on(self.cfg)
         self.wave = intel.approach(self.wave, 1.0 if want_wave else 0.0, 0.1)
@@ -250,7 +257,7 @@ class EdgeGlow(QWidget):
             grad.setColorAt(1.0, QColor(r, g, b, a_top))
             p.fillPath(path, QBrush(grad))
 
-        k = max(0.0, min(1.0, float(self.cfg.get("wave_opacity", 85)) / 100.0))   # 0 — невидимы, 100 — непрозрачны
+        k = 1.0                                     # волны непрозрачные
         layer(1.7, 0.6, round(90 * k), round(255 * k))     # задняя: светлее и выше
         layer(0.0, 0.85, round(150 * k), round(255 * k))   # передняя: плотнее, ближе к краю
 
@@ -394,15 +401,59 @@ class Intel:
         self.glow = EdgeGlow(cfg)
         self.island = None                      # плашка «жду» убрана: Mico AI внизу сам показывает состояние
         self.glow.island = None
-        self.wichat = WiChat(cfg)
-        import brain as _brain                     # модели Ollama: список и память
-        self.wichat.models_provider = _brain.list_models
-        self.wichat.model_pick.connect(self._pick_model)
-        self.wichat.send.connect(self._on_send)
-        self.wichat.closed.connect(self._wichat_closed)
-        self.wichat.dnd.connect(self.set_dnd)
-        self.wichat.rewrite.connect(self.rewrite)
-        self.wichat.file_cleared.connect(self._clear_file)
+        self.aichat = AIChat(cfg)
+        import brain as _brain                     # модели Mico AI: список и память
+        self.aichat.models_provider = _brain.list_models
+        self.aichat.model_pick.connect(self._pick_model)
+        self.aichat.send.connect(self._on_send)
+        self.aichat.closed.connect(self._aichat_closed)
+        self.aichat.dnd.connect(self.set_dnd)
+        self.aichat.rewrite.connect(self.rewrite)
+        self.aichat.file_cleared.connect(self._clear_file)
+        self.aichat.color_pick.connect(self.blob.pick_color)     # палитра чата: Mico крутится и меняет цвет
+        # недавние чаты, поиск и история — те же, что в обычном чате Mico AI
+        self.aichat.attach(self.panel._store, lambda: self.panel.conv_id, self._wi_open_conv, self._wi_new_conv)
+        self.aichat.settings_all.connect(self.blob.settings_requested.emit)   # «Все настройки» из бокового меню
+        self.aichat.profile_requested.connect(self.panel.edit_profile)        # аватар: профиль общий
+        self.aichat.attach_requested.connect(self._wi_pick_file)              # скрепка: файл для вопросов
+        self.panel.title_ready.connect(self.aichat.refresh_side)             # название чата придумано — обновить список
+        self.panel.profile_changed.connect(self.aichat.refresh_profile)
+        self.voice = voice_ctl.shared(cfg)                        # голос: озвучка и голосовой ввод, всё локально (один на всё)
+        self.voice.heard.connect(self._voice_heard)               # что услышал Mico (для «почему не реагирует»)
+        self.voice.said.connect(self._on_voice_said)              # распознанная фраза — вопрос как из чата (или «хватит»)
+        self.voice.speaking.connect(self.blob.set_speaking)       # рот и речь
+        self.voice.level.connect(self.blob.set_voice_level)
+        self.voice.status.connect(self._voice_status)
+        self.voice.listening.connect(self._voice_listening)
+        self.aichat.voice_toggle.connect(self._voice_toggle)
+        self.aichat.voice_pick.connect(self._voice_pick)
+        self.aichat.listen.connect(self.enter_voice_mode)       # микрофон в чате: голосовой режим
+        self.voice.woke.connect(self._on_wake)                    # «мико» услышан: сразу открываем голосовой чат
+        self.blob.slept.connect(self.voice.arm_wake)              # во сне «мико» продолжаем слушать
+        self.blob.awake.connect(self.voice.arm_wake)
+        self.voice.speaking.connect(self._on_voice_speaking)      # закончил говорить — снова слушаем (голосовой режим)
+        self.voice.ready.connect(self._voice_rearm)               # модель распознавания загрузилась
+        self.voice_mode = False                                   # голосовой режим: чат свёрнут, под Mico — кнопки
+        self._voice_rest = None                                   # где Mico стоял до голосового режима (вернётся туда)
+        self._mico_hidden = False                                 # «переключись на текст»: Mico скрыт, остаётся только чат
+        self.voice_dock = VoiceDock(cfg)
+        self.voice_dock.color_pick.connect(self.blob.pick_color)
+        self.voice_dock.mute_clicked.connect(self._voice_mute_toggle)
+        self.voice_dock.exit_clicked.connect(self.exit_voice_mode)
+        self.voice_dock.voice_pick.connect(self._voice_pick)          # голос — тот же выбор, что в чате
+        self.voice_dock.speed_pick.connect(self._voice_speed_pick)
+        self.voice_dock.subs_toggled.connect(self._voice_subs_toggle)
+        self.voice.sentence.connect(self.voice_dock.show_mico)      # субтитры: фраза, которую Mico сейчас говорит
+        self.voice.mic_level.connect(self.voice_dock.set_user_level)  # волны: громкость пользователя
+        self.voice.level.connect(self.voice_dock.set_mico_level)      # волны: громкость голоса Mico
+        self.voice.said.connect(self.voice_dock.show_user)          # субтитры: вопрос пользователя
+        self.blob.tapped.connect(self._blob_tapped)                 # нажатия по Mico в голосовом режиме
+        self.blob.slept.connect(self._voice_slept)                  # сон в голосовом режиме: полоска сужается до обводки
+        self.blob.woke.connect(self._voice_woke)                    # проснулся от нажатия — полоска разворачивается
+        self._taps = []                                             # времена последних нажатий
+        self._tap_warn_at = 0.0                                     # когда последний раз просили не нажимать так часто
+        if self.voice.enabled() or self.voice.wake_on():
+            self.voice.ensure_ready()                             # модели грузим заранее, в фоне
         self.load_bar = LoadBar(cfg)
         self.dnd_until = 0                      # «не беспокоить» до этого времени (0 — не включено)
         self._file = None                       # файл, о котором спрашивают в чате Mico AI (только в памяти)
@@ -422,13 +473,16 @@ class Intel:
         self.checks.timeout.connect(self.check_system)
         if self.on():
             self._start()
+            QTimer.singleShot(1500, self._voice_default)          # Mico AI — голосовой помощник: сразу голосовой режим
 
     def on(self):
         return intel.style_of(self.cfg.get("assist_style")) == intel.INTELLIGENCE
 
     def restyle(self):
         """Сменили цвет Mico AI или тему: строка и чат Mico AI перекрашиваются сразу, без перезапуска."""
-        self.wichat._apply_style()
+        self.aichat._apply_style()
+        if getattr(self, "voice_dock", None) is not None:
+            self.voice_dock.refresh(self.voice.muted())
 
     def quiet(self):
         """В полноэкранном режиме (игра, видео, презентация) Mico AI не появляется."""
@@ -492,10 +546,7 @@ class Intel:
         return QPoint(x, y)
 
     def _base_opacity(self):
-        try:
-            return float(self.cfg.get("opacity", 1.0))
-        except (TypeError, ValueError):
-            return 1.0
+        return 1.0                                  # прозрачности нет: Mico всегда непрозрачный
 
     def _run(self, obj, prop, start, end, ms, curve=None, after=None):
         """Одна плавная анимация. Ссылку храним в _live, пока она идёт. curve — None: плавно туда и обратно."""
@@ -539,31 +590,32 @@ class Intel:
         QTimer.singleShot(ms + 120, lambda: self._tour(intel.tour_lines(tip_lines), 0))
 
     def _leave(self):
-        self.wichat.dismiss()
+        self.aichat.dismiss()
         self.load_bar.hide_bar()
         self.glow.keep = False
         ms = int(intel.LEAVE_SEC * 1000)
         self.glow.sweep(intel.LEAVE_SEC, "listen", goal=0.0)           # полоска стягивается обратно
         QTimer.singleShot(ms + 60, lambda: self.glow.set_on(False))
         self.blob.locked = False                                       # Mico AI поедет в свой угол сам (_glide)
+        self._mico_hidden = False
         self._show_blob()
 
     def _tour(self, lines, i):
         """Mico AI по порядку рассказывает о Mico AI в своём чате. Закрыли чат — тур прекращается."""
-        if not self.on() or (i and not self.wichat.isVisible()):
+        if not self.on() or (i and not self.aichat.isVisible()):
             return
         if i >= len(lines):
             self.glow.set_on(True, "listen")              # тур кончился, чат открыт — полоса горит дальше
             return
-        self.show_wichat(activate=False)
-        self.wichat.set_busy(True)
+        self.show_aichat(activate=False)
+        self.aichat.set_busy(True)
         QTimer.singleShot(400 if i == 0 else intel.TOUR_GAP_MS, lambda: self._tour_say(lines, i))
 
     def _tour_say(self, lines, i):
         if not self.on():
             return
-        self.wichat.set_busy(False)
-        self.wichat.add_mico(lines[i])
+        self.aichat.set_busy(False)
+        self.aichat.add_mico(lines[i])
         secs = intel.speak_seconds(lines[i])
         self.glow.set_on(True, "tip")
         self.glow.wave_for(secs)
@@ -579,6 +631,8 @@ class Intel:
     # ----- показ и гашение -----
     def _show_blob(self):
         """Mico AI виден. Если он был спрятан во сне в Mico AI — поднимается снизу и проявляется."""
+        if self._mico_hidden:                       # текстовый режим: Mico не показываем
+            return
         for anim in (self._move, self._fade_out, self._drop):
             if anim is not None:
                 anim.stop()
@@ -601,42 +655,32 @@ class Intel:
             self.blob.show()
 
     def on_sleep(self):
-        """Mico AI уснул: в Mico AI он плавно уходит вниз и растворяется, а не прячется в угол."""
+        """Mico AI уснул: его чат уходит вместе с ним. Сам Mico растворяется на месте (см. Blob.vanish)."""
         if not self.on():
             return
-        self.wichat.dismiss()                                    # Mico AI уходит — и его чат уходит вместе с ним
-        start = QPoint(self.blob.pos())
-        self.blob.locked = True
-        self._drop = self._run(self.blob, b"pos", start, start + QPoint(0, intel.SLEEP_DROP_PX), 900)
-        self._fade_out = self._run(self.blob, b"windowOpacity", self.blob.windowOpacity(), 0.0, 900,
-                                   after=self._gone)
-
-    def _gone(self):
-        self.blob.locked = False
-        if self.blob.windowOpacity() <= 0.01:
-            self.blob.hide()
-            self.blob.setWindowOpacity(self._base_opacity())
-            self.blob.move(self._spot())                    # на месте: при возвращении поднимется снизу
+        self.aichat.dismiss()
 
     # ----- свой чат Mico AI -----
-    def show_wichat(self, activate=True):
-        self.wichat.refresh_model_info()           # кнопка модели показывает точное имя модели
+    def show_aichat(self, activate=True):
+        if self.voice_mode:                        # голосовой режим: чат свёрнут, Mico говорит вслух
+            return
+        self.aichat.refresh_model_info()           # кнопка модели показывает точное имя модели
         """Открывает чат Mico AI над Mico. Mico AI при этом ждёт: полоса горит."""
         self.blob.touch()
-        if self.blob.asleep:
+        if self.blob.asleep and not self._mico_hidden:
             self.blob.wake(silent=True)
         self._show_blob()
-        if not self.wichat.isVisible():
+        if not self.aichat.isVisible():
             self.glow.set_on(True, "listen")
-        self.wichat.show_near(self.blob, activate)
+        self.aichat.show_near(self.blob, activate)
 
-    def toggle_wichat(self):
-        if self.wichat.isVisible():
-            self.wichat.dismiss()
+    def toggle_aichat(self):
+        if self.aichat.isVisible():
+            self.aichat.dismiss()
         else:
-            self.show_wichat()
+            self.show_aichat()
 
-    def _wichat_closed(self):
+    def _aichat_closed(self):
         if self.on():
             if self.panel.busy:
                 self.glow.set_on(True, "think")
@@ -645,17 +689,21 @@ class Intel:
 
     def wi_user(self, q):
         """Вопрос пользователя (из чата или горячей клавиши) — в чат Mico AI короткой подписью."""
-        self.wichat.add_user(self._labels.pop(q, q))
+        self.aichat.add_user(self._labels.pop(q, q))
 
     def wi_mico(self, text):
         """Текст Mico AI (ответ, напоминание, приветствие) — в чат Mico AI."""
-        self.wichat.add_mico(text)
+        self.aichat.add_mico(text)
 
     def busy(self, on):
         """Mico AI думает: полоса горит цветом «думает». Чат Mico AI показывает, что Mico AI печатает."""
+        if on and self.voice_mode:
+            self.voice.stop_listening()                       # Mico думает — не слушаем
+        elif not on and self.voice_mode:
+            QTimer.singleShot(500, self._voice_rearm)         # ответа может не быть — тогда снова слушаем
         if not self.on():
             return
-        self.wichat.set_busy(on)
+        self.aichat.set_busy(on)
         self.glow.keep = bool(on) and not self.quiet()           # думает — полоска горит до ответа
         if on and not self.blob.asleep:
             self.blob.set_mood("thinking")                       # Mico AI показывает своё «думаю», а не точки в чате
@@ -665,7 +713,7 @@ class Intel:
             return
         if on:
             self.glow.set_on(True, "think")
-        elif self.wichat.isVisible():
+        elif self.aichat.isVisible():
             self.glow.set_on(True, "listen")
         else:
             self.glow.pulse(1.0, "think")
@@ -675,18 +723,43 @@ class Intel:
         В полноэкранном режиме тихо: ответ останется в чате."""
         if not self.on() or not text or self.quiet():
             return
+        if self.voice.enabled() or self.voice_mode:
+            tag_mood, _ = emotions.split_mood(text)
+            mood = tag_mood or emotions.detect_emotion(text) or "idle"   # настроение ответа — и в голосе, и в мимике
+            if mood != "idle":
+                self.blob.set_mood(mood, 4)
+            if self.voice_mode:
+                self.voice_dock.show_mico(emotions.split_mood(text)[1])   # субтитры: ответ целиком, дальше фразы по ходу речи
+            self.voice.speak(text, mood)                          # ответ говорим вслух, рот двигается в такт
         self._last_answer = text
-        self.wichat.show_rewrite_row()
+        self.aichat.show_rewrite_row()
         secs = intel.speak_seconds(text)
         self.glow.wave_for(secs)
-        if self.wichat.isVisible():                      # чат открыт: полоса горит, пока он открыт
+        if self.voice_mode:
+            return                                  # голосовой режим: чат свёрнут, ответ уже говорим — чат не открываем
+        if self.aichat.isVisible():                      # чат открыт: полоса горит, пока он открыт
             self.glow.set_on(True, "listen")
             return
         self.glow.pulse(secs + 0.5, "think", label="отвечаю…")
         if intel.opens_chat(text):
-            self.show_wichat(activate=False)
+            self.show_aichat(activate=False)
             return
-        self.show_wichat(activate=False)
+        self.show_aichat(activate=False)
+
+    def _wi_open_conv(self, cid, rid=None):
+        """Открыть прежний разговор в чате Mico AI: открываем его в обычном чате и показываем его реплики."""
+        if self.panel.busy or self.panel._store is None:
+            return
+        self.panel.open_chat(cid, focus_rid=rid)
+        if self.panel.conv_id == cid:
+            self.aichat.show_history(self.panel._store.conv_messages(cid, limit=200), focus_rid=rid)
+
+    def _wi_new_conv(self):
+        """Новый чат из бокового меню: пустая лента и новый разговор (память начнётся с первого вопроса)."""
+        if self.panel.busy:
+            return
+        self.panel.new_chat()
+        self.aichat.clear_messages()
 
     def _pick_model(self, name):
         """Смена модели прямо в чате: следующий ответ пойдёт ею. Выбор сохраняем в настройках."""
@@ -695,7 +768,7 @@ class Intel:
             self.panel.brain.save_cfg()
         except Exception:
             pass
-        self.wichat.refresh_model_info()
+        self.aichat.refresh_model_info()
         self.notify(f"Теперь отвечаю моделью {name}. Первый ответ может занять время: модель загружается в память.", "tip")
 
     def notify(self, text, state="tip"):
@@ -703,10 +776,10 @@ class Intel:
         Текст всегда попадает в чат Mico AI; строкой над Mico AI показываем, если чат закрыт."""
         if not self.on() or not text:
             return
-        self.wichat.add_mico(text)
+        self.aichat.add_mico(text)
         if self.hushed():
             return
-        if self.wichat.isVisible():
+        if self.aichat.isVisible():
             self.glow.set_on(True, state)                 # чат открыт: полоска держит цвет причины до следующего события
             return
         self.glow.pulse(4.0, state)
@@ -760,8 +833,8 @@ class Intel:
     # ----- помощник по буферу, реакция на ошибки, файлы (только Mico AI) -----
     def quick(self, label, prompt, image=None):
         """Короткий вопрос в фоне: файл, буфер, ошибка. Ответ — в чат Mico AI; в память разговора не пишется."""
-        self.wichat.add_user(label)
-        self.wichat.set_busy(True)
+        self.aichat.add_user(label)
+        self.aichat.set_busy(True)
         self.glow.keep = True
         self.glow.set_on(True, "think")
         if self.blob.isVisible():
@@ -777,10 +850,10 @@ class Intel:
 
     def _quick_done(self, text):
         self.glow.keep = False
-        self.wichat.set_busy(False)
+        self.aichat.set_busy(False)
         if self.blob.isVisible() and self.blob.mood == "thinking":
             self.blob.set_mood("idle")              # ответ готов — точки уходят
-        self.wichat.add_mico(text)
+        self.aichat.add_mico(text)
         self.answer(text)
 
     def _error_options(self, title, text):
@@ -790,11 +863,11 @@ class Intel:
 
     def _offer(self, text, options, state="warn"):
         """Mico AI сам предлагает помощь: текст в чат и кнопки с вариантами под ним. «Не сейчас» — убрать кнопки."""
-        self.wichat.add_mico(text)
-        self.wichat.show_offer_row(list(options) + [("Не сейчас", None)])
+        self.aichat.add_mico(text)
+        self.aichat.show_offer_row(list(options) + [("Не сейчас", None)])
         self.glow.pulse(4.0, state)
-        if not self.wichat.isVisible():
-            self.show_wichat(activate=False)
+        if not self.aichat.isVisible():
+            self.show_aichat(activate=False)
 
     def clip_seen(self, text, now):
         """Буфер обмена: если там текст ошибки — предложить объяснить. Один и тот же текст — один раз."""
@@ -842,13 +915,13 @@ class Intel:
                 self.notify("Не получилось открыть картинку.", "tip")
             else:
                 self._file = {"name": name, "text": "", "image": img, "ts": time.time()}
-                self.wichat.set_file(name)
+                self.aichat.set_file(name)
                 self.quick(f"Картинка: {name}", intel.IMAGE_PROMPT, image=img)
         elif kind == "text":
             text = filereader.read_text(path)
             if text:
                 self._file = {"name": name, "text": text, "image": None, "ts": time.time()}
-                self.wichat.set_file(name)
+                self.aichat.set_file(name)
                 self.quick(f"Файл: {name}", intel.file_prompt(name, text))
             else:
                 self.notify("Не получилось прочитать этот файл: он пустой или не текстовый.", "tip")
@@ -869,9 +942,276 @@ class Intel:
             return
         self.panel.submit(text)
 
+    def _save(self):
+        try:
+            self.panel.brain.save_cfg()
+        except Exception:
+            pass
+
+    # ----- голосовой режим: отдельное окно с Mico, внизу быстрая панель -----
+    def enter_voice_mode(self):
+        """Микрофон в чате нажат: чат сворачивается, открывается окно с Mico и панелью, Mico слушает вопрос."""
+        if self.voice_mode:
+            return
+        self.voice_mode = True
+        self._mico_hidden = False                             # голосовой режим: Mico снова на виду
+        self.blob.keep_awake = False                          # голосовой режим: Mico может уснуть (в обводке)
+        self.blob.touch()
+        if self.blob.asleep:
+            self.blob.wake(silent=True)
+        self._show_blob()
+        self._voice_rest = QPoint(self.blob.pos())            # где Mico стоял — туда вернётся после режима
+        self.aichat.dismiss()                                 # чат сворачивается
+        self.voice.set_session(True)                          # ответы говорим вслух, даже если озвучка выключена
+        self.voice.set_muted(False)
+        if not self.voice.is_ready():
+            self.voice.ensure_ready()                         # голос и распознавание грузятся в фоне
+        self.voice_dock.clear_subs()
+        self.voice_dock.refresh(self.voice.muted())
+        self.blob.voice_taps = True
+        self.voice_dock.show_stage(self.blob)
+        self._voice_rearm()
+
+    def _voice_default(self):
+        """Mico AI — голосовой помощник: по умолчанию запускается в голосовом режиме.
+        Первый запуск после установки проигрывает вступление (intro_voice), его вызывает онбординг."""
+        if not self.cfg.get("tour_done") and not self.cfg.get("quiet_mode"):
+            return
+        if self.on() and not self.voice_mode and not self.quiet():
+            self.enter_voice_mode()
+
+    INTRO_TEXT = "Теперь по умолчанию голосовой чат, а не текстовый."
+
+    def intro_voice(self):
+        """Первый запуск: Mico вылетает из левого верхнего угла, кружит к центру экрана, говорит,
+        что теперь по умолчанию голосовой чат, и влетает в голосовой бар."""
+        if self.voice_mode or not self.on():
+            return
+        g = self.blob._screen_avail()
+        w, h = self.blob.width(), self.blob.height()
+        final = QPoint(g.center().x() - w // 2, g.center().y() - h // 2)
+        start = QPoint(g.left() + 24, g.top() + 24)
+        self.blob.touch()
+        if self.blob.asleep:
+            self.blob.wake(silent=True)
+        self.blob.locked = True                                  # движением управляет вступление
+        self.blob.keep_awake = False
+        self.blob.move(start)
+        self.blob.show()
+        self.voice.set_session(True)                             # говорим вслух, даже если озвучка выключена
+        if not self.voice.is_ready():
+            self.voice.ensure_ready()
+        import math
+        r0 = math.hypot(start.x() - final.x(), start.y() - final.y())
+        a0 = math.atan2(start.y() - final.y(), start.x() - final.x())
+        anim = QVariantAnimation(self.blob)
+        anim.setDuration(2400)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        steps = 24
+        for i in range(steps + 1):
+            t = i / steps
+            r = r0 * (1.0 - t)                                   # спираль: сужается к центру
+            ang = a0 + 2 * math.pi * 1.2 * t                     # почти полный круг
+            anim.setKeyValueAt(t, QPoint(round(final.x() + r * math.cos(ang)), round(final.y() + r * math.sin(ang))))
+        anim.valueChanged.connect(lambda v: self.blob.move(v))
+        anim.finished.connect(self._intro_say)
+        self._live.append(anim)
+        anim.start()
+
+    def _intro_say(self):
+        """Mico уже в центре: говорит, что по умолчанию голосовой чат."""
+        self.blob.set_mood("happy", 3)
+        self.voice.speak(self.INTRO_TEXT, "happy")
+        QTimer.singleShot(int(intel.speak_seconds(self.INTRO_TEXT) * 1000) + 300, self._intro_fly)
+
+    def _intro_fly(self):
+        """Mico влетает в голосовой бар."""
+        self.cfg["tour_done"] = True
+        self._save()
+        self.enter_voice_mode()
+
+    def exit_voice_mode(self, to_text=False):
+        """Крестик: микрофон закрыт, Mico замолкает, окно гаснет, Mico возвращается на место, затем открывается чат.
+        to_text — «хватит» или «переключись на текст»: Mico пропадает совсем, остаётся обычный чат."""
+        if not self.voice_mode:
+            return
+        self.blob.touch()                                     # отсчёт до сна начинается заново, и до возврата Mico он не заснёт
+        brain = getattr(self.panel, "brain", None)
+        if brain is not None:
+            brain.last_screen = None                          # снимок экрана не храним после голосового режима
+        self.voice_mode = False
+        if self.blob.asleep:
+            self.blob.wake(silent=True)                       # Mico должен быть на виду, когда голосовой режим закрыт
+        self.voice.stop_speaking()
+        self.voice.stop_listening()
+        self.voice.set_session(False)
+        self.voice.set_muted(False)                           # микрофон как был: «мико», если он включён
+        rest, self._voice_rest = self._voice_rest, None
+        self.blob.keep_awake = False
+        self.blob.voice_taps = False
+        if to_text:
+            self.voice_dock.dismiss(return_to=None, after=self._text_gone)
+        else:
+            self.voice_dock.dismiss(return_to=rest, after=self._voice_gone)
+
+    def _text_gone(self):
+        """Текстовый режим: Mico скрыт, открывается чат без него (вернётся по микрофону или при следующем запуске голоса)."""
+        self._mico_hidden = True
+        self.blob.hide()
+        self.show_aichat()
+
+    def _blob_tapped(self):
+        """Нажали на Mico в голосовом режиме: чат не открываем. Mico радуется, а если нажимают часто — просит не спешить."""
+        if not self.voice_mode or self.voice_dock.in_pill():
+            return
+        now = time.time()
+        self._taps = [t for t in self._taps if now - t < intel.TAP_WINDOW_SEC] + [now]
+        self.blob.touch()
+        if len(self._taps) >= intel.TAP_LIMIT and now - self._tap_warn_at > intel.TAP_WARN_GAP_SEC:
+            self._tap_warn_at = now
+            self._taps = []
+            self.blob.set_mood("shy", 4)
+            self.blob.jump(120)
+            self.voice_dock.show_mico(intel.TAP_WARNING)            # чат свёрнут — просьба идёт в субтитры и голосом
+            self.voice.speak(intel.TAP_WARNING, "shy")
+            return
+        self.blob.set_mood("excited", 2.5)                          # веселая реакция на нажатие
+        self.voice_dock.toggle_detach()                             # без прыжка: Mico аккуратно выезжает сам                             # один клик: Mico выпрыгивает из полоски или возвращается
+
+    def _voice_slept(self):
+        """Mico уснул в голосовом режиме: полоска сужается до одного Mico в обводке."""
+        if not self.voice_mode:
+            return
+        spot = self.voice_dock.sleep_pill()
+        if spot is not None:
+            self.blob.rest_pos = spot                          # при пробуждении не прыгает на старое место
+        self.voice.begin_listening()                           # во сне вопросы всё равно слушаем
+
+    def _voice_woke(self):
+        """Mico проснулся (нажали на него): полоска возвращается."""
+        if self.voice_mode:
+            self.voice_dock.expand_pill()
+
+    def _voice_gone(self):
+        """Mico уже на месте — открываем чат Mico AI."""
+        self.blob.touch()
+        self.show_aichat()
+
+    def _voice_subs_toggle(self, on):
+        """Кнопка субтитров: запоминаем выбор, чтобы при следующем голосовом режиме субтитры были включены."""
+        self.cfg["voice_subs"] = bool(on)
+        self._save()
+
+    def _voice_rearm(self):
+        """Снова слушаем, когда Mico ответил и замолчал. Пока он думает или говорит — не слушаем."""
+        if not self.voice_mode or self.panel.busy or self.voice.is_speaking():
+            return
+        self.voice.begin_listening()
+
+    def _on_voice_speaking(self, on):
+        if not on and self.voice_mode:
+            QTimer.singleShot(350, self._voice_rearm)
+
+    def _voice_mute_toggle(self):
+        """Кнопка микрофона: выключить или снова включить. Включили — сразу слушаем."""
+        on = not self.voice.muted()
+        self.voice.set_muted(on)
+        self.blob.keep_awake = on                           # микрофон выключен — Mico не засыпает и остаётся на виду
+        self.voice_dock.refresh(on)
+        if not on:
+            self._voice_rearm()
+
+    def _voice_toggle(self, on):
+        if on:
+            self.notify("Озвучиваю ответы. Голос скачается один раз, около 60 МБ.", "tip")
+        self.voice.set_enabled(on)
+        self._save()
+
+    def _voice_pick(self, name):
+        self.voice.set_voice(name)
+        self._save()
+
+    def _voice_speed_pick(self, speed):
+        """Скорость речи из кнопки настроек: следующая фраза уже идёт с новой скоростью."""
+        self.cfg["voice_speed"] = float(speed)
+        self._save()
+
+    def _voice_heard(self, text):
+        """В режиме «мико» показываем, что распознано: так видно, слышит ли Mico вообще и как записалось слово."""
+        self.aichat.inp.setPlaceholderText(f"Слышу: «{text[:60]}»" if text else "Слышу тишину…")
+
+    def _voice_status(self, text):
+        """Статус голоса: в строке ввода, а в голосовом режиме — под Mico. Ошибки — в чате."""
+        self.aichat.inp.setPlaceholderText(text or "Напиши Mico AI…")
+        if self.voice_mode:
+            self.voice_dock.set_status(text)
+        if text.startswith("Голос не") or text.startswith("Микрофон не"):
+            self.notify(text, "worried")
+        if self.voice_mode and text.startswith(("Не расслышал", "Не разобрал", "Голос не распознал")):
+            QTimer.singleShot(400, self._voice_rearm)         # вопрос не разобрали — снова слушаем
+
+    def _on_wake(self, rest):
+        """Услышали «мико!»: сразу открываем голосовой чат. Если вопрос сказан в той же фразе — он уходит ответом."""
+        if self.voice_mode:
+            if self.voice_dock.in_pill():                      # спал в обводке — будим и разворачиваем полоску
+                self.blob.wake(silent=True)
+                self.voice_dock.expand_pill()
+            return
+        self.enter_voice_mode()
+        if rest:
+            QTimer.singleShot(700, lambda: self._on_send(rest))      # сначала режим откроется, потом вопрос
+
+    def _on_voice_said(self, text):
+        """Фраза из микрофона. «Хватит» в голосовом режиме — завершаем его, всё остальное — вопрос."""
+        self.blob.touch()                                       # говорят — Mico не засыпает
+        from voice_text import is_stop_phrase
+        if self.voice_mode and is_stop_phrase(text):
+            self.voice_dock.show_mico("Хорошо, переключаюсь на текст 👋")
+            self.exit_voice_mode(to_text=True)
+            return
+        if self.voice_mode and self.voice_dock.in_pill():      # вопрос во сне — будим Mico и отвечаем
+            self.blob.wake(silent=True)
+            self.voice_dock.expand_pill()
+        self._on_send(text)
+
+    def _voice_listening(self, on):
+        self.blob.set_listening(on)                             # мимика: внимательно слушает
+        if on and not self.blob.asleep:                         # во сне настроение не меняем: Mico спит
+            self.blob.set_mood("curious", 3)           # слушает — смотрит на строку ввода
+
     def _clear_file(self):
         self._file = None
-        self.wichat.set_file(None)
+        self.aichat.set_file(None)
+
+    def _wi_pick_file(self):
+        """Скрепка в чате: выбираем файл. В отличие от перетаскивания, ответ сам не пишем —
+        файл ждёт вопроса, как в обычном чате."""
+        path, _ = QFileDialog.getOpenFileName(
+            self.aichat, "Выбери файл", "",
+            "Файлы (*.txt *.md *.log *.csv *.json *.xml *.html *.py *.js *.ts *.ini *.pdf *.docx "
+            "*.png *.jpg *.jpeg *.bmp *.webp *.gif);;Все файлы (*)")
+        if not path:
+            return
+        name = os.path.basename(path)
+        kind = filereader.kind(path)
+        if kind == "image":
+            try:
+                with open(path, "rb") as f:
+                    img = base64.b64encode(f.read()).decode()
+            except OSError:
+                self.notify("Не получилось открыть картинку.", "tip")
+                return
+            self._file = {"name": name, "text": "", "image": img, "ts": time.time()}
+        elif kind == "text":
+            text = filereader.read_text(path)
+            if not text:
+                self.notify("Не получилось прочитать этот файл: он пустой или не текстовый.", "tip")
+                return
+            self._file = {"name": name, "text": text, "image": None, "ts": time.time()}
+        else:
+            self.notify(intel.FILE_UNSUPPORTED, "tip")
+            return
+        self.aichat.set_file(name)
 
     def expire_file(self, now):
         """Файл забываем, если о нём долго не спрашивали."""
@@ -888,11 +1228,11 @@ class Intel:
         """«Не беспокоить» на N минут: Mico AI молчит сам. 0 — снова можно."""
         if minutes <= 0:
             self.dnd_until = 0
-            self.wichat.add_mico("Снова могу подсказывать сам.")
+            self.aichat.add_mico("Снова могу подсказывать сам.")
             return
         self.dnd_until = time.time() + minutes * 60
         until = time.strftime("%H:%M", time.localtime(self.dnd_until))
-        self.wichat.add_mico(f"Не буду беспокоить до {until}. Если спросишь сам — отвечу.")
+        self.aichat.add_mico(f"Не буду беспокоить до {until}. Если спросишь сам — отвечу.")
 
     def set_load(self, percent):
         """Загрузка процессора: тонкая линия внизу, если это включено и Mico AI не молчит по расписанию."""

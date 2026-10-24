@@ -449,7 +449,6 @@ def ui_setting(page, label, on=True, mode="toggle", timeout=14):
     return False, out or "ошибка UI Automation"
 
 
-
 # ============================ Чтение и регулировка параметров ============================
 def reg_get(path, name, default=None, hive="HKCU"):
     """Прочитать значение реестра (None/default, если его нет)."""
@@ -576,12 +575,6 @@ def classic_context_menu(on):
         return ok, "" if ok else "Windows не дала изменить реестр"
     ok = run_quiet("reg", "delete", key, "/f")
     return ok, "" if ok else "ключ уже был удалён"
-
-
-def restart_explorer():
-    run_quiet("taskkill", "/f", "/im", "explorer.exe")
-    subprocess.Popen(["explorer.exe"], creationflags=NOWIN)
-    return True, ""
 
 
 # ============================ Рабочее место и история копирования (бета) ============================

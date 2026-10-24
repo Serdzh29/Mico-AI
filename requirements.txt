@@ -10,3 +10,13 @@ pycaw>=20240210
 comtypes>=1.4
 # чтение PDF (чистый Python, без системных библиотек)
 pypdf>=4.0
+# голос Mico AI — всё локально, системные голоса Windows не используются
+numpy>=1.26
+onnxruntime>=1.17
+piper-tts>=1.2
+faster-whisper>=1.0
+sounddevice>=0.4.6
+scipy>=1.11          # нужен голосовым движкам (без него голос не запускается: No module named 'scipy')
+# встроенная модель без Ollama (режим «builtin»): можно не ставить, тогда работает Ollama.
+# Для Windows готовое колесо может быть недоступно — тогда сборка без неё, и Mico использует Ollama.
+llama-cpp-python>=0.3.0

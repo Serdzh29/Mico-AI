@@ -1,3 +1,4 @@
+import theme
 """Первый запуск Mico AI: коротко, что умеет программа, и выбор цвета. Показывается один раз."""
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget
@@ -14,11 +15,12 @@ ABILITIES = [
 
 
 class OnboardingDialog(QDialog):
-    def __init__(self, cfg, parent=None):
+    def __init__(self, cfg, parent=None, on_color=None):
         super().__init__(parent)
         self.setWindowTitle("Добро пожаловать в Mico AI")
         self.setMinimumWidth(460)
         self.color = cfg.get("color") or COLORS[0][0]
+        self.on_color = on_color              # сразу показываем выбранный цвет на Mico AI
         self._swatches = {}
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 24, 28, 22)
@@ -47,7 +49,7 @@ class OnboardingDialog(QDialog):
         w.setTextFormat(Qt.TextFormat.RichText)
         items = "".join(f"<p style='margin:10px 0'><b>{t}</b><br>"
                         f"<span style='color:#8a8a8e'>{d}</span></p>" for t, d in ABILITIES)
-        w.setText("<div style='font-size:20px;font-weight:600'>Привет, я Mico AI</div>"
+        w.setText("<div style='font-family:" + theme.FONT_DISPLAY + ";font-size:26px;font-weight:700'>Привет, я Mico AI</div>"
                   "<p style='color:#8a8a8e;margin-top:6px'>Живу на твоём компьютере и работаю офлайн.</p>"
                   + items)
         w.setWordWrap(True)
@@ -56,7 +58,7 @@ class OnboardingDialog(QDialog):
     def _color_page(self):
         w = QLabel()
         w.setTextFormat(Qt.TextFormat.RichText)
-        w.setText("<div style='font-size:20px;font-weight:600'>Выбери цвет</div>"
+        w.setText("<div style='font-family:" + theme.FONT_DISPLAY + ";font-size:26px;font-weight:700'>Выбери цвет</div>"
                   "<p style='color:#8a8a8e;margin-top:6px'>Им окрасятся Mico AI и его чат. "
                   "Поменять можно в настройках в любой момент.</p>")
         w.setWordWrap(True)
@@ -66,7 +68,7 @@ class OnboardingDialog(QDialog):
         for hex_color, name in COLORS:
             b = QPushButton()
             b.setToolTip(name)
-            b.setFixedSize(54, 54)
+            theme.round_mask(b, 54)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.clicked.connect(lambda _=False, c=hex_color: self._pick(c))
             self._swatches[hex_color] = b
@@ -81,6 +83,8 @@ class OnboardingDialog(QDialog):
 
     def _pick(self, hex_color):
         self.color = hex_color
+        if self.on_color is not None:
+            self.on_color(hex_color)          # Mico AI и его чат перекрашиваются сразу, без «Готово»
         self._sync()
 
     def _sync(self):

@@ -3,12 +3,12 @@
 
 # (id, подпись по умолчанию, группа)
 ITEMS = [
-    ("settings", "⚙️ Настройки…", "main"),
-    ("capabilities", "✨ Что ты умеешь?", "main"),
-    ("quiet", "🔕 Режим тишины", "mode"),
-    ("env", "🩺 Проверить окружение", "help"),
-    ("about", "ℹ О Mico AI", "about"),
-    ("uninstall", "🗑 Удалить Mico AI…", "about"),
+    ("settings", "Настройки…", "main"),
+    ("capabilities", "Что ты умеешь?", "main"),
+    ("quiet", "Режим тишины", "mode"),
+    ("env", "Проверить окружение", "help"),
+    ("about", "О Mico AI", "about"),
+    ("uninstall", "Удалить Mico AI…", "about"),
     ("exit", "Выход", "about"),
 ]
 LABELS = {i: l for i, l, _ in ITEMS}
