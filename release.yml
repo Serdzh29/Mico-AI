@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Установка зависимостей
+        run: |
+          python -m pip install -r requirements.txt pyinstaller
+      - name: Проверки перед сборкой
+        run: python tests/run_all.py
+      - name: Сборка Mico.exe (как build_exe.bat)
+        shell: pwsh
+        run: |
+          $data = @()
+          foreach ($d in "assets", "knowledge", "data") {
+            if (Test-Path $d) { $data += "--add-data"; $data += "$d;$d" }
+          }
+          $icon = @()
+          if (Test-Path "assets/mico.ico") { $icon = @("--icon", "assets/mico.ico") }
+          python -m PyInstaller --noconsole --onefile --clean --name Mico @data @icon --manifest Mico.manifest `
+            --hidden-import win32crypt --hidden-import win32com.client --hidden-import pythoncom `
+            --hidden-import pywintypes --collect-all faster_whisper --collect-all ctranslate2 --collect-all piper --collect-all piper_phonemize --collect-all onnxruntime --collect-all sounddevice --collect-all scipy --exclude-module tkinter main.py
+      - name: Файл сборки как артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mico.exe
+          path: dist/Mico.exe
+      - name: Релиз на GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Mico.exe
+          generate_release_notes: true
