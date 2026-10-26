@@ -478,6 +478,13 @@ document.documentElement.setAttribute('data-theme','light');var m=document.query
     .card{padding:32px 26px}
   }
 EOF
+  /* ===== hero: keep Mico fully visible on first screen ===== */
+  .hero{padding-top:clamp(120px,15svh,150px);padding-bottom:clamp(40px,6svh,70px)}
+  .hero h1{font-size:clamp(56px,min(13vw,16svh),170px)}
+  .hero-stage{margin-top:clamp(24px,4svh,50px)}
+  @media (min-width:701px){
+    .hero-stage{width:min(560px,92vw,max(200px,calc(100svh - 600px)))}
+  }
 </style>
 </head>
 <body>
@@ -506,7 +513,7 @@ EOF
   <div class="wrap">
     <a class="new-badge" href="#whats-new"><span class="dot"></span><span data-i18n="hero_badge">Version 2026.10.2300 is here. See what's new →</span></a>
     <p class="eyebrow" data-i18n="hero_eyebrow">New on Windows · Mico AI</p>
-    <h1>Mico AI.</h1>
+    <h1>Mico.</h1>
     <p class="sub" data-i18n="hero_sub">Talks, listens, sees your screen and remembers how you work. Everything runs on your computer.</p>
     <div class="cta">
       <a class="btn primary" href="#download" data-i18n="hero_btn_dl">Download Mico</a>
