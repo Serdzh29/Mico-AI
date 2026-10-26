@@ -123,6 +123,17 @@ document.documentElement.setAttribute('data-theme','light');var m=document.query
   .bars span{width:6px;border-radius:6px;background:var(--choc);animation:eq 1.2s ease-in-out infinite;height:30%}
   @keyframes eq{0%,100%{height:18%}50%{height:100%}}
 
+  /* ===== free badge + footnote ===== */
+  .free-badge{display:inline-flex;align-items:center;gap:12px;margin:30px auto 0;padding:10px 24px 10px 10px;border-radius:999px;background:var(--choc);color:var(--apricot);font-size:16px;font-weight:600;letter-spacing:-.01em;box-shadow:0 14px 32px rgba(var(--choc-rgb),.28)}
+  .free-badge .star{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--apricot);color:var(--choc);font-size:15px;flex:none}
+  .free-badge b{font-weight:700}
+  .free-badge sup{font-size:.75em;margin-left:1px;opacity:.85}
+  .free-foot{padding:0 0 110px}
+  .free-card{display:flex;gap:16px;align-items:flex-start;max-width:760px;margin-inline:auto;padding:26px 30px;border-radius:var(--radius);background:rgba(var(--choc-rgb),.07);border:1px solid rgba(var(--choc-rgb),.14)}
+  .free-mark{flex:none;width:30px;height:30px;border-radius:50%;background:var(--choc);color:var(--apricot);display:grid;place-items:center;font-size:17px;font-weight:700;line-height:1}
+  .free-card p{font-size:15px;line-height:1.6;opacity:.9}
+  .free-card p b{font-weight:700}
+
   /* ===== coming soon ===== */
   .soon-tag{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:var(--apricot);color:var(--choc);font-weight:600;font-size:14px;margin-bottom:18px}
   .soon-tag .dot{width:8px;height:8px;border-radius:50%;background:var(--choc);display:inline-block}
@@ -156,11 +167,12 @@ document.documentElement.setAttribute('data-theme','light');var m=document.query
   @media (max-width:760px){.settings{grid-template-columns:1fr}}
 
   /* ===== roadmap ===== */
-  .road{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:64px}
+  .road{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:64px}
   .road div{padding:30px;border-radius:24px;background:var(--cream)}
   .road small{font-weight:700;font-size:12px;letter-spacing:.04em;opacity:.65}
   .road h4{font-size:21px;margin-top:10px;font-weight:700}
   .road p{font-size:15px;margin-top:8px;opacity:.8}
+  @media (max-width:1100px){.road{grid-template-columns:repeat(2,1fr)}}
   @media (max-width:820px){.road{grid-template-columns:1fr}}
 
   /* ===== faq ===== */
@@ -503,11 +515,13 @@ EOF
       <div class="halo"></div>
       <img class="mico-anim hero-mico" data-mico="1" alt="Mico">
     </div>
+    <div class="free-badge reveal"><span class="star" aria-hidden="true">★</span><span data-i18n="free_badge"><b>Completely free</b> — every feature is available to everyone<sup>*</sup></span></div>
     <div class="hero-facts">
       <span class="pill" data-i18n="hero_pill1"><b>Windows 10 and 11</b></span>
       <span class="pill" data-i18n="hero_pill2"><b>Voice and chat</b> in one window</span>
       <span class="pill" data-i18n="hero_pill3"><b>Local models</b> with no cloud</span>
       <span class="pill" data-i18n="hero_pill4"><b>Palettes</b> and themes</span>
+      <span class="pill" data-i18n="hero_pill5"><b>Available</b> worldwide</span>
     </div>
   </div>
 </header>
@@ -587,7 +601,7 @@ EOF
     <div class="reveal">
       <p class="kicker" data-i18n="f_kicker">Features</p>
       <h2 data-i18n="f_h2">Everything your PC needs, at hand.</h2>
-      <p class="lead" data-i18n="f_lead">Some features are still in development. They are marked with labels, and the full list is in the “What's next” section.</p>
+      <p class="lead" data-i18n="f_lead">Some features are still in development. They are marked with labels, and the full list is in the “Roadmap” section.</p>
     </div>
 
     <div class="grid">
@@ -837,12 +851,13 @@ EOF
 <!-- ================= ROADMAP ================= -->
 <section style="padding-top:40px">
   <div class="wrap">
-    <p class="kicker reveal" data-i18n="rm_kicker">What's next</p>
-    <h2 class="reveal" data-i18n="rm_h2">Mico gets smarter every week.</h2>
+    <p class="kicker reveal" data-i18n="rm_kicker">Roadmap</p>
+    <h2 class="reveal" data-i18n="rm_h2">Mico gets smarter every day.</h2>
     <div class="road">
       <div class="reveal"><small data-i18n="rm_small">In development</small><h4 data-i18n="rm1_h">Extended Windows commands</h4><p data-i18n="rm1_p">More system actions by phrase: network, screen, sound and power.</p></div>
       <div class="reveal"><small data-i18n="rm_small">In development</small><h4 data-i18n="rm2_h">Context between sessions</h4><p data-i18n="rm2_p">Mico will remember unfinished tasks and return to them.</p></div>
       <div class="reveal"><small data-i18n="rm_small">In development</small><h4 data-i18n="rm3_h">New voices</h4><p data-i18n="rm3_p">More voice options and fine control of speed and intonation.</p></div>
+      <div class="reveal"><small data-i18n="rm_small">In development</small><h4 data-i18n="rm4_h">English language</h4><p data-i18n="rm4_p">Voice and chat in English.</p></div>
     </div>
   </div>
 </section>
@@ -917,6 +932,12 @@ EOF
         <p data-i18n="sec6"><b>Report a vulnerability.</b> If you find a security bug, email us at: mico.ai@hotmail.com. We'll respond and fix it.</p>
       </details>
     </div>
+  </div>
+</section>
+
+<section class="free-foot">
+  <div class="wrap">
+    <div class="free-card reveal"><span class="free-mark" aria-hidden="true">*</span><p data-i18n="free_note">Mico is completely free for now, and all of its features are available to everyone. We don't rule out paid features and/or subscriptions in the future.</p></div>
   </div>
 </section>
 
@@ -1069,7 +1090,7 @@ const RU = {
   hero_sub: "Говорит, слушает, видит экран и помнит, как вы работаете. Всё работает на вашем компьютере.",
   hero_btn_dl: "Скачать Mico", hero_btn_more: "Что он умеет →",
   hero_pill1: "<b>Windows 10 и 11</b>", hero_pill2: "<b>Голос и чат</b> в одном окне",
-  hero_pill3: "<b>Локальные модели</b> без облака", hero_pill4: "<b>Палитры</b> и темы",
+  hero_pill3: "<b>Локальные модели</b> без облака", hero_pill4: "<b>Палитры</b> и темы", hero_pill5: "<b>Доступен</b> во всех регионах мира",
   cs_tag: "Скоро выходит", cs_h2: "Mico AI 26.10.30 уже на подходе.",
   cs_lead: "Самое большое обновление.",
   cs1_h: "Абсолютно новый чат", cs1_p: "Окно чата полностью переработано: новый дизайн, поиск по сообщениям и панель истории.",
@@ -1096,7 +1117,7 @@ const RU = {
   sp2a: "<strong>Характер важен.</strong> Mico — маленький персиковый помощник с добрым лицом. Он приветствует вас по времени суток, радуется, когда вы возвращаетесь, и не выглядит скучным инструментом.",
   sp2b: "Он учится на ваших действиях и со временем подсказывает точнее. А если нужна тишина, он может полностью спрятаться одним переключателем.",
   f_kicker: "Возможности", f_h2: "Всё, что нужно ПК, под рукой.",
-  f_lead: "Некоторые функции ещё в разработке. Они отмечены метками, а полный список — в разделе «Что дальше».",
+  f_lead: "Некоторые функции ещё в разработке. Они отмечены метками, а полный список — в разделе «Планы развития».",
   c1_h: "Чат с локальными моделями", c1_p: "Общайтесь с моделями, которые работают прямо на вашем компьютере. Быстрые для коротких вопросов, умные для сложных задач.",
   c1_l1: "Скачивание моделей прямо из программы", c1_l2: "Отдельные списки: модели для чата и модели для экрана", c1_l3: "Сохранение контекста внутри разговора",
   tag_av: "Доступно",
@@ -1157,10 +1178,13 @@ const RU = {
   pk_lead: "Выберите объём памяти и то, как будете пользоваться. Мы подскажем, какие модели скачать и чего ожидать.",
   pk_l1: "1. Оперативная память", pk_l2: "2. Как будете пользоваться",
   pk_cap: "Ориентиры для выбора, а не точные требования. Объём памяти: «Диспетчер задач» → «Производительность» → «Память».",
-  rm_kicker: "Что дальше", rm_h2: "Mico становится умнее каждую неделю.", rm_small: "В разработке",
+  rm_kicker: "Планы развития", rm_h2: "Mico становится умнее каждый день.", rm_small: "В разработке",
   rm1_h: "Расширенные команды Windows", rm1_p: "Больше системных действий по фразе: сеть, экран, звук и питание.",
   rm2_h: "Контекст между сессиями", rm2_p: "Mico будет помнить незавершённые дела и возвращаться к ним.",
   rm3_h: "Новые голоса", rm3_p: "Больше вариантов озвучки и тонкая настройка скорости и интонации.",
+  rm4_h: "Английский язык", rm4_p: "Голос и чат на английском языке.",
+  free_badge: "<b>Полностью бесплатно</b> — все функции доступны всем<sup>*</sup>",
+  free_note: "Сейчас Mico полностью бесплатен, и все его функции доступны всем. Мы не исключаем, что в будущем появятся платные функции и/или подписки.",
   fa_kicker: "Вопросы и ответы", fa_h2: "Частые вопросы.",
   fq1: "Какие версии Windows поддерживаются?", fa1: "Mico работает на Windows 10 и Windows 11.",
   fq2: "Нужен ли интернет?", fa2: "Интернет нужен для загрузки моделей, погоды и голосовых компонентов. Чат с установленными моделями работает локально.",
