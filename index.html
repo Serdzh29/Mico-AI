@@ -134,6 +134,7 @@ document.documentElement.setAttribute('data-theme','light');var m=document.query
   .free-card p{font-size:15px;line-height:1.6;opacity:.9}
   .free-card p b{font-weight:700}
 
+
   /* ===== coming soon ===== */
   .soon-tag{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:var(--apricot);color:var(--choc);font-weight:600;font-size:14px;margin-bottom:18px}
   .soon-tag .dot{width:8px;height:8px;border-radius:50%;background:var(--choc);display:inline-block}
@@ -835,6 +836,12 @@ EOF
     <h2 class="reveal" data-i18n="pk_h2">Let's find the right Mico for your PC.</h2>
     <p class="lead reveal" data-i18n="pk_lead">Choose your memory size and how you'll use it. We'll tell you which models to download and what to expect.</p>
 
+    <div class="req reveal" style="justify-content:flex-start;margin-top:28px;margin-bottom:44px">
+      <span class="pill" data-i18n="req1"><b>OS:</b> Windows 10 or 11. Older versions are not supported</span>
+      <span class="pill" data-i18n="req4"><b>Disk:</b> 20 GB of free space. With less, answers may slow down</span>
+      <span class="pill" data-i18n="req2"><b>Internet:</b> for installation and weather</span>
+    </div>
+
     <p class="pick-label reveal" data-i18n="pk_l1">1. Memory (RAM)</p>
     <div class="tabs reveal" id="ramTabs"></div>
 
@@ -889,11 +896,6 @@ EOF
 
     <a class="btn dl-btn" id="downloadBtn" href="https://github.com/Serdzh29/Mico-AI/releases/download/v2026.10.23000/Mico.exe" data-url="https://github.com/Serdzh29/Mico-AI/releases/download/v2026.10.23000/Mico.exe" download data-i18n="dl_btn">⬇︎ Download Mico for Windows</a>
     <p class="dl-meta" data-i18n="dl_meta">Windows 10 and 11 · file Mico.exe · about 285 MB</p><p class="dl-meta" style="font-family:ui-monospace,Consolas,monospace;font-size:12px;word-break:break-all;max-width:640px;margin-inline:auto">SHA-256: 85e1b32dff42f61d109901a73a770da6f32dffd956bc26474d05f0aedae7d9a2</p>
-    <div class="req">
-      <span class="pill" data-i18n="dl_req1"><b>OS:</b> Windows 10 / 11</span>
-      <span class="pill" data-i18n="dl_req2"><b>Internet:</b> for installation and weather</span>
-      <span class="pill" data-i18n="dl_req3"><b>Memory:</b> depends on the model</span>
-    </div>
   </div>
 </section>
 
@@ -1020,6 +1022,7 @@ const STR = {
     labels: { chat: "Chat:", screen: "Screen:", voice: "Voice:" },
     warnHeavy: ram => "<b>Warning:</b> on " + ram + ", chat and screen together run slowly. Turn on the screen model only when you need it.",
     warnRam8: "<b>Tip:</b> on 8 GB, all three modes together will lag. It's better to turn on the screen model on request.",
+    warnLowRam: "<b>Note:</b> 8 GB of memory is recommended. On 4–6 GB, Mico runs very slowly and may freeze.",
     alertNoLink: "The download link has not been added yet."
   },
   ru: {
@@ -1077,6 +1080,7 @@ const STR = {
     labels: { chat: "Чат:", screen: "Экран:", voice: "Голос:" },
     warnHeavy: ram => "<b>Внимание:</b> на " + ram + " чат и экран вместе работают медленно. Включайте модель для экрана только тогда, когда она нужна.",
     warnRam8: "<b>Совет:</b> на 8 ГБ все три режима вместе будут работать с задержками. Модель для экрана лучше включать по запросу.",
+    warnLowRam: "<b>Важно:</b> рекомендуется 8 ГБ. На 4–6 ГБ Mico работает очень медленно и может зависать.",
     alertNoLink: "Ссылка на загрузку ещё не добавлена."
   }
 };
@@ -1196,7 +1200,7 @@ const RU = {
   dl_lead: "Маленький, тёплый и всегда готов помочь. Скачайте его и поставьте на свой компьютер.",
   dl_btn: "⬇︎ Скачать Mico для Windows",
   dl_meta: "Windows 10 и 11 · файл Mico.exe · около 285 МБ",
-  dl_req1: "<b>ОС:</b> Windows 10 / 11", dl_req2: "<b>Интернет:</b> для установки и погоды", dl_req3: "<b>Память:</b> зависит от модели",
+  req1: "<b>ОС:</b> Windows 10 или 11. Более старые версии не поддерживаются", req2: "<b>Интернет:</b> для установки и погоды", req4: "<b>Место на диске:</b> 20 ГБ свободного места. При меньшем объёме ответы могут тормозить",
   lg_kicker: "Документы", lg_h2: "Конфиденциальность, лицензия и безопасность.",
   lg_lead: "Редакция от 26 октября 2026 года. Здесь описано, как Mico обращается с вашими данными, на каких условиях его можно использовать и как защитить свой компьютер.",
   pv_s: "Политика конфиденциальности",
@@ -1283,8 +1287,9 @@ function buildPick() {
   // 4–6 GB cannot run chat and screen comfortably at the same time
   const heavy = useIdx >= 2 && ramIdx <= 1;
   let warn = "";
-  if (heavy) warn = '<div class="warn">' + S.warnHeavy(S.ramLabels[ramIdx]) + "</div>";
-  if (useIdx === 3 && ramIdx === 2) warn = '<div class="warn">' + S.warnRam8 + "</div>";
+  if (ramIdx <= 1) warn += '<div class="warn">' + S.warnLowRam + "</div>";
+  if (heavy) warn += '<div class="warn">' + S.warnHeavy(S.ramLabels[ramIdx]) + "</div>";
+  if (useIdx === 3 && ramIdx === 2) warn += '<div class="warn">' + S.warnRam8 + "</div>";
   pickOutEl.innerHTML =
     '<div class="big">' + r.title + "</div>" +
     "<p>" + r.tip + "</p>" +
@@ -1294,6 +1299,7 @@ function buildPick() {
       "<li><span><b>" + S.labels.voice + "</b> " + u.voice + "</span></li>" +
     "</ul>" + warn;
 }
+
 
 function setLang(l) {
   lang = l;
