@@ -1245,7 +1245,7 @@ const trackEl = $("track"), cmdTabsEl = $("cmdTabs"), cmdListEl = $("cmdList"), 
 const ramTabsEl = $("ramTabs"), useTabsEl = $("useTabs"), pickOutEl = $("pickOut");
 
 let lang = "en";
-try { const s = localStorage.getItem("mico-lang"); if (s === "ru" || s === "en") lang = s; } catch (e) {}
+try { const s = localStorage.getItem("mico-lang-v2"); if (s === "ru" || s === "en") lang = s; } catch (e) {}
 let catIdx = 0, cmdIdx = 0, ramIdx = 2, useIdx = 1;
 
 function applyTheme() {
@@ -1310,7 +1310,7 @@ function buildPick() {
 
 function setLang(l) {
   lang = l;
-  try { localStorage.setItem("mico-lang", l); } catch (e) {}
+  try { localStorage.setItem("mico-lang-v2", l); } catch (e) {}
   document.documentElement.lang = l;
   document.title = STR[l].title;
   document.querySelector('meta[name="description"]').setAttribute("content", STR[l].description);
