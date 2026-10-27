@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://serdzh29.github.io/Mico-AI/sitemap.xml
