@@ -135,16 +135,6 @@ document.documentElement.setAttribute('data-theme','light');var m=document.query
   .free-card p b{font-weight:700}
 
 
-  /* ===== coming soon ===== */
-  .soon-tag{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:var(--apricot);color:var(--choc);font-weight:600;font-size:14px;margin-bottom:18px}
-  .soon-tag .dot{width:8px;height:8px;border-radius:50%;background:var(--choc);display:inline-block}
-  /* ===== voice coming-soon note ===== */
-  .soon-note{display:flex;align-items:center;gap:14px;margin-top:28px;padding:16px 20px;max-width:520px;border-radius:16px;background:rgba(78,42,30,.08);border:1px solid rgba(78,42,30,.16)}
-  .soon-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-bottom:18px}
-  .soon-row .kicker{margin:0}
-  .soon-row .soon-note{margin-top:0;max-width:none;padding:7px 14px;border-radius:999px}
-  .soon-note p{margin:0;font-size:15px;line-height:1.5;font-weight:600;color:var(--choc)}
-  .soon-dot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:var(--choc);box-shadow:0 0 0 5px rgba(78,42,30,.16)}
   /* ===== steps (chocolate section) ===== */
   .dark{background:var(--choc);color:var(--apricot)}
   .dark .kicker,.dark .lead,.dark .statement em{opacity:.7}
@@ -485,6 +475,110 @@ EOF
   @media (min-width:701px){
     .hero-stage{width:min(560px,92vw,max(200px,calc(100svh - 600px)))}
   }
+
+  /* ===== revision: spacing scale, fewer boxes, mobile ===== */
+  /* Spacing: 8 inside an element, 24 between elements, 48 inside a section, 96 between sections */
+  section{padding:48px 0}
+  .grid{gap:24px;margin-top:48px}
+  .card{padding:32px}
+  .dive{padding:0;gap:48px}
+  .faq{gap:0}
+  .steps,.road,.models{gap:24px}
+  .split{gap:48px}
+  /* Fewer boxes: only the 3 main features and the interactive tool keep a container */
+  .panel{background:none;box-shadow:none;padding:0;min-height:0}
+  .model{background:none;box-shadow:none;border-radius:0;padding:24px 0 0;border-top:1px solid rgba(var(--choc-rgb),.18)}
+  .model.dark{background:var(--choc);color:var(--apricot);border-radius:var(--radius);padding:32px;border-top:0}
+  .road div{background:none;box-shadow:none;border:0;border-top:1px solid rgba(var(--choc-rgb),.18);border-radius:0;padding:24px 0 0}
+  .step{background:none;box-shadow:none;border:0;border-top:1px solid rgba(var(--apricot-rgb),.3);border-radius:0;padding:24px 0 0}
+  .faq details{background:none;border:0;border-bottom:1px solid rgba(var(--choc-rgb),.15);border-radius:0;box-shadow:none;padding:0}
+  .faq details p{padding-bottom:22px}
+  .plain-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px 24px;margin-top:48px}
+  .plain{border-top:1px solid rgba(var(--choc-rgb),.18);padding-top:24px}
+  .plain .ico{width:auto;height:auto;background:none;font-size:22px;display:block;margin-bottom:8px}
+  .plain h3{font-size:22px;line-height:1.2;margin-top:0}
+  .plain p{font-size:16px;opacity:.82;margin-top:8px}
+  .plain ul{list-style:none;display:grid;gap:6px;margin-top:12px;font-size:15px;opacity:.85}
+  .plain li::before{content:"•";margin-right:8px}
+  .plain .tag{margin-top:12px}
+  .states{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+  .state{border-top:1px solid rgba(var(--choc-rgb),.18);padding-top:24px}
+  .state b{display:block;font-size:17px;font-weight:700}
+  .state p{font-size:15px;line-height:1.5;opacity:.8;margin-top:8px}
+  /* Mobile: no horizontal scroll, main CTA visible and tappable */
+  html{overflow-x:clip}
+  img,svg,video{max-width:100%}
+  .grid>*,.plain-grid>*,.dive>*,.split>*,.cmd-wrap>*,.states>*,.pick,.panel{min-width:0}
+  .bubble{overflow-wrap:anywhere}
+  @media (max-width:900px){.plain-grid{grid-template-columns:1fr}.states{grid-template-columns:1fr 1fr}}
+  @media (max-width:700px){
+    section{padding:40px 0}
+    h2{font-size:clamp(32px,9vw,44px)}
+    .hero{padding:104px 0 56px;min-height:auto}
+    h1{font-size:clamp(48px,14vw,64px)}
+    .hero-photo{margin-top:36px;width:56vw}
+    .cta{flex-direction:column;align-items:stretch;width:100%;max-width:340px;margin-inline:auto}
+    .cta .btn{justify-content:center;width:100%}
+    .download{padding:96px 0}
+    .card{padding:24px}
+    .pick{padding:24px}
+    .req{justify-content:flex-start}
+    .cmd-out{padding:24px;min-height:0}
+    .states{grid-template-columns:1fr}
+  }
+
+  /* ===== revision 2: no cards, chat examples, clean models and roadmap ===== */
+  .cmd{background:none!important;box-shadow:none!important;border-radius:0;padding:12px 0;border-bottom:1px solid rgba(var(--choc-rgb),.15);color:var(--choc)}
+  .cmd.on{background:none!important;color:var(--choc);font-weight:700;border-bottom-color:var(--choc)}
+  .cmd-list{gap:0}
+  .cmd-out{background:none!important;box-shadow:none!important;color:var(--choc);padding:8px 0 0;min-height:0;border-radius:0}
+  .cmd-out .q{opacity:.6}
+  .cmd-out .a{color:var(--choc)}
+  .cmd-out .note{opacity:.6}
+  .pick{background:none!important;box-shadow:none!important;border:0;border-radius:0;padding:0;backdrop-filter:none;-webkit-backdrop-filter:none}
+  .pick-out .warn{background:none;padding:0 0 0 14px;border-left:3px solid var(--choc);margin-top:4px}
+  .free-card{background:none!important;box-shadow:none!important;border:0;border-top:1px solid rgba(var(--choc-rgb),.18);border-radius:0;padding:24px 0}
+
+  /* chat examples: a conversation, not a box */
+  .chat{display:flex;flex-direction:column;gap:20px;max-width:520px;background:none;box-shadow:none;padding:0;min-height:0}
+  .chat-head{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid rgba(var(--choc-rgb),.15)}
+  .chat-av{width:40px;height:40px;border-radius:50%;object-fit:cover;flex:none;background:var(--cream)}
+  .chat-head b{display:block;font-size:16px;font-weight:700}
+  .chat-head span{display:block;font-size:13px;opacity:.7}
+  .chat-body{display:flex;flex-direction:column;gap:12px}
+  .chat-body .bubble{font-size:16px;line-height:1.45;padding:12px 18px;max-width:80%;box-shadow:0 8px 20px rgba(var(--choc-rgb),.10)}
+  .chat-body .bubble.me{border-radius:22px 22px 6px 22px}
+  .chat-body .bubble.mico{background:var(--cream);color:var(--choc);border-radius:22px 22px 22px 6px}
+  .chat-foot{display:flex;align-items:center;gap:14px;padding:10px 16px 10px 10px;border-radius:999px;background:rgba(var(--choc-rgb),.07)}
+  .chat-foot .mic{width:38px;height:38px;border-radius:50%;background:var(--choc);flex:none;position:relative}
+  .chat-foot .mic::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:12px;margin:-6px 0 0 -4px;border-radius:4px;background:var(--apricot)}
+  .chat-foot .bars{height:36px;justify-content:flex-start;flex:1;min-width:0}
+  .chat .caption{text-align:left;margin-top:0;font-size:13px;opacity:.6}
+
+  /* models: a clean 2x2 list */
+  .models{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:48px}
+  .model,.model.dark{background:none!important;color:var(--choc)!important;box-shadow:none!important;border-radius:0;padding:24px 0 0;border-top:1px solid rgba(var(--choc-rgb),.2)}
+  .model .tag,.model.dark .tag{background:rgba(var(--choc-rgb),.08);color:var(--choc)}
+  .model h3{font-size:24px}
+  .model p{margin-top:10px;opacity:.8}
+  .model ul{margin-top:14px;gap:6px}
+
+  /* roadmap: plain columns */
+  .road{display:grid;grid-template-columns:repeat(2,1fr);gap:48px 24px;margin-top:48px}
+  .road > div{background:none!important;box-shadow:none!important;border:0!important;border-top:1px solid rgba(var(--choc-rgb),.2)!important;border-radius:0;padding:24px 0 0!important}
+  .road small{display:block}
+  @media (max-width:820px){.models,.road{grid-template-columns:1fr}.chat-body .bubble{max-width:90%}}
+
+  /* ===== revision 3: model list without boxes (overrides every earlier .model rule) ===== */
+  .models .model{background:none!important;background-image:none!important;border:0!important;border-top:1px solid rgba(var(--choc-rgb),.2)!important;border-radius:0!important;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;padding:28px 0 0!important;color:var(--choc)!important;transform:none!important;min-height:0}
+  .models .model:hover{transform:none!important;box-shadow:none!important}
+  .models .model h3{color:var(--choc)!important;font-size:24px;margin-top:0}
+  .models .model p{color:var(--choc)!important;opacity:.8;margin-top:10px}
+  .models .model li{color:var(--choc)!important}
+  .models .model .tag{background:rgba(var(--choc-rgb),.08)!important;color:var(--choc)!important}
+  .models .model ul{margin-top:14px;gap:6px}
+  .models .model li::before{color:var(--choc)}
+  .models{gap:48px 48px!important}
 </style>
 </head>
 <body>
@@ -549,7 +643,7 @@ EOF
 </section>
 
 <!-- ================= WHAT'S NEW ================= -->
-<section class="dark" id="whats-new" style="padding-top:110px;padding-bottom:110px">
+<section class="dark" id="whats-new">
   <div class="wrap">
     <p class="kicker reveal" data-i18n="wn_kicker">What's new</p>
     <h2 class="reveal" data-i18n="wn_h2">Version 2026.10.2300 is here.</h2>
@@ -568,28 +662,9 @@ EOF
 </section>
 
 <!-- ================= INTRO ================= -->
-<section class="dark" id="coming-soon" style="padding-top:110px;padding-bottom:110px">
-  <div class="wrap">
-    <span class="soon-tag reveal"><span class="dot"></span><span data-i18n="cs_tag">Coming soon</span></span>
-    <h2 class="reveal" data-i18n="cs_h2">Mico AI 26.10.30 is on the way.</h2>
-    <p class="lead reveal" data-i18n="cs_lead">The biggest update yet.</p>
-    <div class="steps">
-      <div class="step"><b>01</b><h4 data-i18n="cs1_h">A brand-new chat window</h4><p data-i18n="cs1_p">The chat window has a full redesign, with a new look, message search and a history panel.</p></div>
-      <div class="step"><b>02</b><h4 data-i18n="cs2_h">Voice chat is here</h4><p data-i18n="cs2_p">Version 2026.10.2300 had no voice chat. Version 26.10.30 adds it, with a microphone button right in the chat input.</p></div>
-      <div class="step"><b>03</b><h4 data-i18n="cs3_h">New settings</h4><p data-i18n="cs3_p">Settings are rebuilt with search, clear sections and a new layout.</p></div>
-      <div class="step"><b>04</b><h4 data-i18n="cs4_h">New switches and sliders</h4><p data-i18n="cs4_p">New toggles and sliders control Mico's size, chat size, transparency, window outlines and the edge bar.</p></div>
-      <div class="step"><b>05</b><h4 data-i18n="cs5_h">Profiles and reply tone</h4><p data-i18n="cs5_p">Create your own profile and adjust the tone of Mico's replies to suit you.</p></div>
-      <div class="step"><b>06</b><h4 data-i18n="cs6_h">Major bug fixes</h4><p data-i18n="cs6_p">A large pass over known issues, so Mico runs more reliably every day.</p></div>
-      <div class="step"><b>07</b><h4 data-i18n="cs7_h">Better performance</h4><p data-i18n="cs7_p">Lower resource use keeps Mico light while it runs.</p></div>
-      <div class="step"><b>08</b><h4 data-i18n="cs8_h">A fully updated installer</h4><p data-i18n="cs8_p">The installer has been completely redone for a cleaner setup.</p></div>
-    </div>
-    <p class="lead reveal" style="margin-top:36px" data-i18n="cs_note">Stay tuned. The release page will go live when the version is out.</p>
-  </div>
-</section>
-
 <section>
   <div class="wrap">
-    <p class="statement reveal" data-i18n="statement">Mico isn't just another chat window. It's a calm assistant that lives alongside your programs, <em>understands what you're doing and helps without getting in the way.</em></p>
+    <p class="statement reveal" data-i18n="statement">Mico answers in chat, reads the error on your screen and opens the Windows setting you need. <em>The models run on your PC.</em></p>
     <div class="split">
       <div class="reveal">
         <p data-i18n="sp1a"><strong>All processing happens on your PC.</strong> Chat and screen models are downloaded once and then run locally. Your questions and messages don't go to the cloud unless it's necessary.</p>
@@ -604,16 +679,16 @@ EOF
 </section>
 
 <!-- ================= FEATURES ================= -->
-<section id="features" style="padding-top:40px">
+<section id="features">
   <div class="wrap">
     <div class="reveal">
       <p class="kicker" data-i18n="f_kicker">Features</p>
-      <h2 data-i18n="f_h2">Everything your PC needs, at hand.</h2>
+      <h2 data-i18n="f_h2">9 things Mico does on your PC, in one window.</h2>
       <p class="lead" data-i18n="f_lead">Some features are still in development. They are marked with labels, and the full list is in the “Roadmap” section.</p>
     </div>
 
-    <div class="grid">
-      <article class="card reveal">
+    <div class="plain-grid">
+      <article class="plain reveal">
         <div class="ico">💬</div>
         <h3 data-i18n="c1_h">Chat with local models</h3>
         <p data-i18n="c1_p">Chat with models that run right on your computer. Fast for quick questions, smart for complex tasks.</p>
@@ -624,22 +699,13 @@ EOF
         </ul>
         <span class="tag" data-i18n="tag_av">Available</span>
       </article>
-
-      <article class="card reveal">
-        <div class="ico">🎙️</div>
-        <h3 data-i18n="c2_h">Voice mode</h3>
-        <p data-i18n="c2_p">Speak — Mico listens and answers out loud. Captions show what it heard and what it replied.</p>
-        <span class="tag" data-i18n="tag_av">Available</span>
-      </article>
-
-      <article class="card reveal" id="screen">
+      <article class="plain reveal" id="screen">
         <div class="ico">👁️</div>
         <h3 data-i18n="c3_h">Understands your screen</h3>
         <p data-i18n="c3_p">Mico sees what's open and helps with what you're doing right now: explains an error, suggests the next step, answers questions about a page.</p>
         <span class="tag" data-i18n="tag_av">Available</span>
       </article>
-
-      <article class="card reveal" id="windows">
+      <article class="plain reveal" id="windows">
         <div class="ico">🖥️</div>
         <h3 data-i18n="c4_h">Controls Windows with phrases</h3>
         <p data-i18n="c4_p">Say or type what you need. Mico understands follow-ups: after “play the next track”, “one more” is understood correctly.</p>
@@ -651,9 +717,15 @@ EOF
         <span class="tag" data-i18n="c4_tag">Partial · expanding</span>
       </article>
 
-      <article class="card reveal">
+      <article class="plain reveal">
+        <div class="ico">🎙️</div>
+        <h3 data-i18n="c2_h">Voice: ask out loud, hear the answer</h3>
+        <p data-i18n="c2_p">Speak — Mico listens and answers out loud. Captions show what it heard and what it replied.</p>
+        <span class="tag" data-i18n="tag_av">Available</span>
+      </article>
+      <article class="plain reveal">
         <div class="ico">🧠</div>
-        <h3 data-i18n="c5_h">Remembers and learns</h3>
+        <h3 data-i18n="c5_h">Remembers your habits, stays on your PC</h3>
         <p data-i18n="c5_p">Mico notices your habits: which apps you open and what you ask most often. This data stays on your computer.</p>
         <ul>
           <li data-i18n="c5_l1">Suggestions based on your habits</li>
@@ -662,31 +734,27 @@ EOF
         </ul>
         <span class="tag" data-i18n="tag_av">Available</span>
       </article>
-
-      <article class="card reveal">
+      <article class="plain reveal">
         <div class="ico">🌤️</div>
-        <h3 data-i18n="c6_h">Greets you on launch</h3>
+        <h3 data-i18n="c6_h">Greets you with the weather on launch</h3>
         <p data-i18n="c6_p">Mico says hello based on local time: “Good morning”, “Good afternoon” or “Good evening”. Along with the greeting it shows the weather and reminds you what you did yesterday.</p>
         <span class="tag" data-i18n="tag_av">Available</span>
       </article>
-
-      <article class="card reveal">
+      <article class="plain reveal">
         <div class="ico">🔎</div>
-        <h3 data-i18n="rep_h">Search in settings</h3>
+        <h3 data-i18n="rep_h">Find any setting by typing a word</h3>
         <p data-i18n="rep_p">Start typing in the Settings search box, for example “quiet” or “outline”. Only matching options stay on screen.</p>
         <span class="tag" data-i18n="tag_av">Available</span>
       </article>
-
-      <article class="card reveal">
+      <article class="plain reveal">
         <div class="ico">🎨</div>
-        <h3 data-i18n="c7_h">Palettes and themes</h3>
+        <h3 data-i18n="c7_h">Palettes that change Mico's states</h3>
         <p data-i18n="c7_p">Choose a palette — the interface colors and Mico's states change together: “Waiting”, “Thinking”, “Break”, “Watching”, “Suggestion”, “Warning”.</p>
         <span class="tag" data-i18n="tag_av">Available</span>
       </article>
-
-      <article class="card reveal">
+      <article class="plain reveal">
         <div class="ico">⚡</div>
-        <h3 data-i18n="c8_h">Start with one action</h3>
+        <h3 data-i18n="c8_h">Starts when you sign in to Windows</h3>
         <p data-i18n="c8_p">Mico can start automatically when the computer turns on and you sign in to Windows, or through a handy .bat launcher. Each time it starts fresh, without stuck old sessions.</p>
         <ul>
           <li data-i18n="c8_l1">Autostart at system startup</li>
@@ -700,10 +768,10 @@ EOF
 
 
 <!-- ================= COMMANDS (interactive) ================= -->
-<section id="commands" style="padding-top:40px">
+<section id="commands">
   <div class="wrap">
     <p class="kicker reveal" data-i18n="cmd_kicker">Commands</p>
-    <h2 class="reveal" data-i18n="cmd_h2">Say what you need. Mico does it.</h2>
+    <h2 class="reveal" data-i18n="cmd_h2">Say “check for updates” and Mico opens Windows Update.</h2>
     <p class="lead reveal" data-i18n="cmd_lead">Pick a category and click a phrase to see an example reply.</p>
     <div class="tabs reveal" id="cmdTabs"></div>
     <div class="cmd-wrap reveal">
@@ -714,12 +782,12 @@ EOF
 </section>
 
 <!-- ================= VOICE ================= -->
-<section id="voice" style="padding-top:40px">
+<section id="voice">
   <div class="wrap">
     <div class="dive">
       <div class="dive-text reveal">
-        <div class="soon-row"><p class="kicker" data-i18n="vo_kicker">Voice mode</p><div class="soon-note"><span class="soon-dot" aria-hidden="true"></span><p data-i18n="vo_soon">Voice chat is only coming in version 26.10.30.</p></div></div>
-        <h3 data-i18n="vo_h3">Speak naturally. Mico answers calmly.</h3>
+        <p class="kicker" data-i18n="vo_kicker">Voice mode</p>
+        <h3 data-i18n="vo_h3">Press the mic, ask, and hear the answer out loud.</h3>
         <p data-i18n="vo_p">Voice mode is a separate panel at the bottom of the screen. Press the mic, say a phrase, and hear the reply. Captions show the text, and Mico doesn't cover what you need to see.</p>
         <ul>
           <li><i>1</i><div data-i18n="vo_l1"><b>Listens</b>Recognizes speech and shows what it heard.</div></li>
@@ -727,14 +795,17 @@ EOF
           <li><i>3</i><div data-i18n="vo_l3"><b>Replies</b>The reply is spoken aloud and shown as captions.</div></li>
         </ul>
       </div>
-      <div class="panel reveal">
-        <div class="bubble me" data-i18n="vo_b1">Play the next track</div>
-        <div class="bubble mico" data-i18n="vo_b2">Playing the next one.</div>
-        <div class="bubble me" data-i18n="vo_b3">One more</div>
-        <div class="bubble mico" data-i18n="vo_b4">Playing one more track.</div>
-        <div class="bars" aria-hidden="true">
-          <span style="animation-delay:0s"></span><span style="animation-delay:.1s"></span><span style="animation-delay:.2s"></span><span style="animation-delay:.3s"></span><span style="animation-delay:.15s"></span><span style="animation-delay:.25s"></span><span style="animation-delay:.05s"></span><span style="animation-delay:.35s"></span><span style="animation-delay:.2s"></span><span style="animation-delay:.1s"></span><span style="animation-delay:.3s"></span><span style="animation-delay:0s"></span><span style="animation-delay:.25s"></span><span style="animation-delay:.15s"></span><span style="animation-delay:.05s"></span>
+      <div class="chat reveal">
+        <div class="chat-head"><img class="chat-av" data-mico="1" alt=""><div><b>Mico</b><span data-i18n="vo_status">Voice mode · listening</span></div></div>
+        <div class="chat-body">
+          <div class="bubble me" data-i18n="vo_b1">Play the next track</div>
+          <div class="bubble mico" data-i18n="vo_b2">Playing the next one.</div>
+          <div class="bubble me" data-i18n="vo_b3">One more</div>
+          <div class="bubble mico" data-i18n="vo_b4">Playing one more track.</div>
         </div>
+        <div class="chat-foot"><span class="mic" aria-hidden="true"></span><div class="bars" aria-hidden="true">
+          <span style="animation-delay:0s"></span><span style="animation-delay:.1s"></span><span style="animation-delay:.2s"></span><span style="animation-delay:.3s"></span><span style="animation-delay:.15s"></span><span style="animation-delay:.25s"></span><span style="animation-delay:.05s"></span><span style="animation-delay:.35s"></span><span style="animation-delay:.2s"></span><span style="animation-delay:.1s"></span><span style="animation-delay:.3s"></span><span style="animation-delay:0s"></span><span style="animation-delay:.25s"></span><span style="animation-delay:.15s"></span><span style="animation-delay:.05s"></span>
+        </div></div>
         <p class="caption" data-i18n="vo_cap">Sample dialogue</p>
       </div>
     </div>
@@ -742,12 +813,12 @@ EOF
 </section>
 
 <!-- ================= SCREEN ================= -->
-<section id="screen-section" style="padding-top:40px">
+<section id="screen-section">
   <div class="wrap">
     <div class="dive rev">
       <div class="dive-text reveal">
         <p class="kicker" data-i18n="sc_kicker">Screen understanding</p>
-        <h3 data-i18n="sc_h3">Mico sees what you see.</h3>
+        <h3 data-i18n="sc_h3">Ask about the error on screen and get the fix.</h3>
         <p data-i18n="sc_p">No need to copy text or describe the situation. Just ask, and Mico looks at the screen and answers to the point.</p>
         <ul>
           <li><i>✓</i><div data-i18n="sc_l1"><b>Errors and warnings</b>Explains what the message means and what to do.</div></li>
@@ -755,9 +826,13 @@ EOF
           <li><i>✓</i><div data-i18n="sc_l3"><b>Its own screen model</b>A separate list of models that look at the screen.</div></li>
         </ul>
       </div>
-      <div class="panel reveal">
-        <div class="bubble me" data-i18n="sc_b1">What does this error mean?</div>
-        <div class="bubble mico" data-i18n="sc_b2">The program can't connect to the server. Check your internet or restart the service. If the error keeps appearing, I'll show you where to change it.</div>
+      <div class="chat reveal">
+        <div class="chat-head"><img class="chat-av" data-mico="1" alt=""><div><b>Mico</b><span data-i18n="sc_status">Screen · error window open</span></div></div>
+        <div class="chat-body">
+          <div class="bubble me" data-i18n="sc_b1">What does this error mean?</div>
+          <div class="bubble mico" data-i18n="sc_b2">The program can't connect to the server. Check your internet or restart the service. If the error keeps appearing, I'll show you where to change it.</div>
+        </div>
+
         <p class="caption" data-i18n="sc_cap">Example. The reply depends on what's shown on screen.</p>
       </div>
     </div>
@@ -768,7 +843,7 @@ EOF
 <section class="dark">
   <div class="wrap">
     <p class="kicker reveal" data-i18n="st_kicker">How it works</p>
-    <h2 class="reveal" data-i18n="st_h2">Four steps from install to first question.</h2>
+    <h2 class="reveal" data-i18n="st_h2">4 steps: download, install, set up, ask.</h2>
     <div class="steps">
       <div class="step reveal"><b>01</b><h4 data-i18n="st1_h">Download</h4><p data-i18n="st1_p">Get the Mico installer for Windows with the button at the bottom of the page.</p></div>
       <div class="step reveal"><b>02</b><h4 data-i18n="st2_h">Install</h4><p data-i18n="st2_p">Mico will offer to choose models for chat and for screen.</p></div>
@@ -779,12 +854,12 @@ EOF
 </section>
 
 <!-- ================= SYSTEM ================= -->
-<section id="system-section" style="padding-top:40px">
+<section id="system-section">
   <div class="wrap">
-    <div class="dive">
+    <div class="dive" style="grid-template-columns:1fr">
       <div class="dive-text reveal">
         <p class="kicker" data-i18n="sy_kicker">System and performance</p>
-        <h3 data-i18n="sy_h3">Mico works alongside you, not on top of everything.</h3>
+        <h3 data-i18n="sy_h3">You set Mico's size, autostart and quiet mode.</h3>
         <p data-i18n="sy_p">Mico is built for Windows and tries not to get in the way. You decide how much space it takes, whether it starts automatically, and how often it speaks first.</p>
         <ul>
           <li><i>⚙</i><div data-i18n="sy_l1"><b>Flexible settings</b>Size, position, transparency and window behavior.</div></li>
@@ -792,20 +867,16 @@ EOF
           <li><i>⚙</i><div data-i18n="sy_l3"><b>Memory optimization</b>We keep reducing RAM usage.</div></li>
         </ul>
       </div>
-      <div class="panel reveal" style="align-items:center;text-align:center">
-        <img class="mico-anim squash" data-mico="1" alt="Mico" style="width:min(300px,80%);border-radius:28px">
-        <p class="caption" data-i18n="sy_cap">Mico at rest</p>
-      </div>
     </div>
   </div>
 </section>
 
 
 <!-- ================= MODELS ================= -->
-<section style="padding-top:40px">
+<section>
   <div class="wrap">
     <p class="kicker reveal" data-i18n="md_kicker">Models</p>
-    <h2 class="reveal" data-i18n="md_h2">Choose a model for your PC.</h2>
+    <h2 class="reveal" data-i18n="md_h2">One model for chat, another for the screen.</h2>
     <p class="lead reveal" data-i18n="md_lead">Chat models and screen models are chosen separately. Downloads happen right in the app.</p>
     <div class="models">
       <div class="model reveal">
@@ -820,7 +891,7 @@ EOF
         <p data-i18n="m2_p">Understands complex tasks and long texts more deeply. Needs more RAM.</p>
         <ul><li data-i18n="m2_l1">More accurate on complex tasks</li><li data-i18n="m2_l2">Needs more memory</li></ul>
       </div>
-      <div class="model dark reveal">
+      <div class="model reveal">
         <span class="tag" data-i18n="tag_screen">For screen</span>
         <h3 style="margin-top:18px" data-i18n="m3_h">Sees the screen</h3>
         <p data-i18n="m3_p">A separate model that looks at the open window and explains what's visible. Chosen in its own list.</p>
@@ -837,10 +908,10 @@ EOF
 </section>
 
 <!-- ================= PICK A MODEL (interactive) ================= -->
-<section id="pick-model" style="padding-top:40px">
+<section id="pick-model">
   <div class="wrap">
     <p class="kicker reveal" data-i18n="pk_kicker">Choose a model</p>
-    <h2 class="reveal" data-i18n="pk_h2">Let's find the right Mico for your PC.</h2>
+    <h2 class="reveal" data-i18n="pk_h2">Pick your RAM and use case to get the right models.</h2>
     <p class="lead reveal" data-i18n="pk_lead">Choose your memory size and how you'll use it. We'll tell you which models to download and what to expect.</p>
 
     <div class="req reveal" style="justify-content:flex-start;margin-top:28px;margin-bottom:44px">
@@ -863,10 +934,10 @@ EOF
 </section>
 
 <!-- ================= ROADMAP ================= -->
-<section style="padding-top:40px">
+<section>
   <div class="wrap">
     <p class="kicker reveal" data-i18n="rm_kicker">Roadmap</p>
-    <h2 class="reveal" data-i18n="rm_h2">Mico gets smarter every day.</h2>
+    <h2 class="reveal" data-i18n="rm_h2">4 features are in development.</h2>
     <div class="road">
       <div class="reveal"><small data-i18n="rm_small">In development</small><h4 data-i18n="rm1_h">Extended Windows commands</h4><p data-i18n="rm1_p">More system actions by phrase: network, screen, sound and power.</p></div>
       <div class="reveal"><small data-i18n="rm_small">In development</small><h4 data-i18n="rm2_h">Context between sessions</h4><p data-i18n="rm2_p">Mico will remember unfinished tasks and return to them.</p></div>
@@ -877,10 +948,10 @@ EOF
 </section>
 
 <!-- ================= FAQ ================= -->
-<section id="faq" style="padding-top:40px">
+<section id="faq">
   <div class="wrap">
     <p class="kicker reveal" data-i18n="fa_kicker">Questions and answers</p>
-    <h2 class="reveal" data-i18n="fa_h2">Frequently asked questions.</h2>
+    <h2 class="reveal" data-i18n="fa_h2">Questions about Windows, internet, data and memory.</h2>
     <div class="faq">
       <details class="reveal"><summary data-i18n="fq1">Which Windows versions are supported?</summary><p data-i18n="fa1">Mico works on Windows 10 and Windows 11.</p></details>
       <details class="reveal"><summary data-i18n="fq2">Do I need internet?</summary><p data-i18n="fa2">Internet is needed to download models, for the weather and for voice components. Chat with installed models works locally.</p></details>
@@ -895,8 +966,8 @@ EOF
 <!-- ================= DOWNLOAD (chocolate) ================= -->
 <section class="download" id="download">
   <div class="wrap">
-    <h2 class="reveal" data-i18n="dl_h2">Try Mico.</h2>
-    <p class="lead reveal" data-i18n="dl_lead">Small, warm, and always ready to help. Download it and install it on your computer.</p>
+    <h2 class="reveal" data-i18n="dl_h2">Download Mico for Windows 10 or 11.</h2>
+    <p class="lead reveal" data-i18n="dl_lead">The installer needs 20 GB of free disk space and an internet connection.</p>
 
     <div class="hero-photo reveal"><img class="mico-anim" data-mico="1" alt="Mico"></div>
 
@@ -907,7 +978,7 @@ EOF
 
 
 <!-- ================= LEGAL ================= -->
-<section id="legal" style="padding-top:40px">
+<section id="legal">
   <div class="wrap">
     <p class="kicker reveal" data-i18n="lg_kicker">Legal</p>
     <h2 class="reveal" data-i18n="lg_h2">Privacy, license and security.</h2>
@@ -1093,6 +1164,8 @@ const STR = {
 
 // ===== Russian translations of static page text (English is the default in the markup) =====
 const RU = {
+  vo_status: "Голосовой режим · слушает", sc_status: "Экран · открыто окно с ошибкой",
+  ms_label: "Состояния модели", ms1_h: "Загрузка", ms1_p: "Модель скачивается. Полоса прогресса показывает, сколько осталось.", ms2_h: "Пусто", ms2_p: "Модель ещё не установлена. Скачайте компактную, чтобы начать.", ms3_h: "Ошибка", ms3_p: "Модель не запустилась, чаще всего из-за памяти. Выберите компактную модель.", ms4_h: "Готово", ms4_p: "Модель загружена. Задайте первый вопрос.",
   n_features: "Возможности", n_commands: "Команды", n_voice: "Голос", n_screen: "Экран",
   n_windows: "Windows", n_pick: "Подбор модели", n_faq: "Вопросы", n_download: "Скачать",
   hero_badge: "Новая версия 2026.10.2300 уже здесь. Посмотрите, что нового →",
@@ -1101,17 +1174,6 @@ const RU = {
   hero_btn_dl: "Скачать Mico", hero_btn_more: "Что он умеет →",
   hero_pill1: "<b>Windows 10 и 11</b>", hero_pill2: "<b>Голос и чат</b> в одном окне",
   hero_pill3: "<b>Локальные модели</b> без облака", hero_pill4: "<b>Палитры</b> и темы", hero_pill5: "<b>Доступен</b> во всех регионах мира",
-  cs_tag: "Скоро выходит", cs_h2: "Mico AI 26.10.30 уже на подходе.",
-  cs_lead: "Самое большое обновление.",
-  cs1_h: "Абсолютно новый чат", cs1_p: "Окно чата полностью переработано: новый дизайн, поиск по сообщениям и панель истории.",
-  cs2_h: "Голосовой чат", cs2_p: "В версии 2026.10.2300 голосового чата не было. В 26.10.30 он появился: кнопка микрофона прямо в поле ввода.",
-  cs3_h: "Новые настройки", cs3_p: "Настройки пересобраны: поиск, понятные разделы и новый вид.",
-  cs4_h: "Новые переключатели и ползунки", cs4_p: "Размер Mico и чата, прозрачность, обводки окон и полоска по краю экрана теперь настраиваются новыми переключателями.",
-  cs5_h: "Профили и тон ответов", cs5_p: "Можно создать свой профиль и настроить тон ответов Mico под себя.",
-  cs6_h: "Исправление множества ошибок", cs6_p: "Масштабная работа над известными проблемами, чтобы Mico стабильнее работал каждый день.",
-  cs7_h: "Оптимизация производительности", cs7_p: "Меньше нагрузки на систему, чтобы Mico оставался лёгким во время работы.",
-  cs8_h: "Полностью обновлённый установщик", cs8_p: "Установщик полностью переработан для более аккуратной установки.",
-  cs_note: "Следите за обновлениями. Страница релиза появится, когда версия выйдет.",
   wn_kicker: "Новое", wn_h2: "Версия 2026.10.2300 уже здесь.",
   wn_lead: "Вот, что изменилось. Полный список и журнал изменений — на странице релиза.",
   wn1_h: "Поиск по настройкам", wn1_p: "В разделе «Настройки» начните печатать в строке поиска, например «тишина» или «обводка». Останутся только подходящие пункты.",
@@ -1121,40 +1183,39 @@ const RU = {
   wn_btn_gh: "Открыть релиз на GitHub", wn_btn_dl: "Скачать установщик →",
   spot_kicker: "Mico в деле", spot_big: "Говорит.<br>Понимает.<br><span>Помнит.</span>",
   spot_lead: "Один помощник для голоса, экрана и Windows. Без лишних окон и облака.",
-  statement: "Mico — не очередное окно с чатом. Это спокойный помощник, который живёт рядом с вашими программами, <em>понимает, чем вы заняты, и помогает, не отвлекая.</em>",
+  statement: "Mico отвечает в чате, читает ошибку на экране и открывает нужный раздел Windows. <em>Модели работают на вашем ПК.</em>",
   sp1a: "<strong>Все вычисления идут на вашем ПК.</strong> Модели для чата и для работы с экраном скачиваются один раз и дальше работают локально. Ваши вопросы и переписка не уходят в облако без необходимости.",
   sp1b: "Mico не привязан к одному сценарию. Он может ответить на вопрос, объяснить ошибку на экране, включить музыку, открыть нужный раздел настроек Windows или просто поговорить, пока вы работаете.",
   sp2a: "<strong>Характер важен.</strong> Mico — маленький персиковый помощник с добрым лицом. Он приветствует вас по времени суток, радуется, когда вы возвращаетесь, и не выглядит скучным инструментом.",
   sp2b: "Он учится на ваших действиях и со временем подсказывает точнее. А если нужна тишина, он может полностью спрятаться одним переключателем.",
-  f_kicker: "Возможности", f_h2: "Всё, что нужно ПК, под рукой.",
+  f_kicker: "Возможности", f_h2: "9 задач, которые Mico решает на вашем ПК, в одном окне.",
   f_lead: "Некоторые функции ещё в разработке. Они отмечены метками, а полный список — в разделе «Планы развития».",
   c1_h: "Чат с локальными моделями", c1_p: "Общайтесь с моделями, которые работают прямо на вашем компьютере. Быстрые для коротких вопросов, умные для сложных задач.",
   c1_l1: "Скачивание моделей прямо из программы", c1_l2: "Отдельные списки: модели для чата и модели для экрана", c1_l3: "Сохранение контекста внутри разговора",
   tag_av: "Доступно",
-  c2_h: "Голосовой режим", c2_p: "Говорите — Mico слушает и отвечает голосом. Субтитры показывают, что он услышал и что ответил.",
+  c2_h: "Голос: спросите вслух, услышьте ответ", c2_p: "Говорите — Mico слушает и отвечает голосом. Субтитры показывают, что он услышал и что ответил.",
   c3_h: "Понимает экран", c3_p: "Mico видит, что открыто, и помогает с тем, что вы делаете прямо сейчас: объясняет ошибку, подсказывает следующий шаг, отвечает о странице.",
   c4_h: "Управляет Windows фразами", c4_p: "Скажите или напишите, что нужно. Mico понимает продолжение разговора: после «включи следующий трек» фраза «ещё один» будет понята правильно.",
   c4_l1: "«Проверь обновления» — откроет проверку Windows Update", c4_l2: "Открытие программ, настроек и системных разделов", c4_l3: "Управление музыкой и громкостью",
   c4_tag: "Частично · расширяется",
-  c5_h: "Помнит и учится", c5_p: "Mico замечает ваши привычки: какие программы вы открываете, что спрашиваете чаще всего. Эти данные остаются на вашем компьютере.",
+  c5_h: "Запоминает привычки и хранит их на ПК", c5_p: "Mico замечает ваши привычки: какие программы вы открываете, что спрашиваете чаще всего. Эти данные остаются на вашем компьютере.",
   c5_l1: "Подсказки по вашим привычкам", c5_l2: "Можно посмотреть и очистить память", c5_l3: "Понимает контекст предыдущих фраз",
-  c6_h: "Приветствие при запуске", c6_p: "Mico здоровается по местному времени: «Доброе утро», «Добрый день» или «Добрый вечер». Вместе с приветствием показывает погоду и напоминает, чем вы занимались вчера.",
-  rep_h: "Поиск по настройкам", rep_p: "Начните печатать в строке поиска в настройках, например «тишина» или «обводка». На экране останутся только подходящие пункты.",
-  c7_h: "Палитры и темы", c7_p: "Выберите палитру — цвета интерфейса и состояний Mico поменяются вместе: «Ждёт», «Думает», «Перерыв», «Наблюдение», «Подсказка», «Предупреждение».",
-  c8_h: "Запуск одним действием", c8_p: "Mico может запускаться сам при включении компьютера и входе в Windows, а также через удобный .bat-лаунчер. Каждый раз он стартует свежим, без застрявших старых сессий.",
+  c6_h: "Здоровается и показывает погоду при запуске", c6_p: "Mico здоровается по местному времени: «Доброе утро», «Добрый день» или «Добрый вечер». Вместе с приветствием показывает погоду и напоминает, чем вы занимались вчера.",
+  rep_h: "Находит любую настройку по слову", rep_p: "Начните печатать в строке поиска в настройках, например «тишина» или «обводка». На экране останутся только подходящие пункты.",
+  c7_h: "Палитры, которые меняют состояния Mico", c7_p: "Выберите палитру — цвета интерфейса и состояний Mico поменяются вместе: «Ждёт», «Думает», «Перерыв», «Наблюдение», «Подсказка», «Предупреждение».",
+  c8_h: "Запускается при входе в Windows", c8_p: "Mico может запускаться сам при включении компьютера и входе в Windows, а также через удобный .bat-лаунчер. Каждый раз он стартует свежим, без застрявших старых сессий.",
   c8_l1: "Автозапуск при старте системы", c8_l3: "Свежий старт каждый раз",
-  cmd_kicker: "Команды", cmd_h2: "Скажите, что нужно. Mico сделает.", cmd_lead: "Выберите категорию и нажмите на фразу, чтобы увидеть пример ответа.",
-  vo_soon: "Голосовой чат выйдет только в версии 26.10.30.",
+  cmd_kicker: "Команды", cmd_h2: "Скажите «проверь обновления» — Mico откроет Центр обновления Windows.", cmd_lead: "Выберите категорию и нажмите на фразу, чтобы увидеть пример ответа.",
   demo_kicker: "Попробуйте", demo_h2: "Задайте вопрос.",
   demo_cap: "Это демонстрация: ответы заготовлены, а не получены от модели на вашем ПК.",
-  vo_kicker: "Голосовой режим", vo_h3: "Говорите естественно. Mico отвечает спокойно.",
+  vo_kicker: "Голосовой режим", vo_h3: "Нажмите микрофон, спросите и услышьте ответ.",
   vo_p: "Голосовой режим — отдельная панель внизу экрана. Нажмите микрофон, скажите фразу и услышьте ответ. Субтитры показывают текст, а Mico не перекрывает то, что нужно видеть.",
   vo_l1: "<b>Слушает</b>Распознаёт речь и показывает, что услышал.",
   vo_l2: "<b>Думает</b>Состояние «Думает» видно сразу.",
   vo_l3: "<b>Отвечает</b>Ответ звучит голосом и выводится субтитрами.",
   vo_b1: "Включи следующий трек", vo_b2: "Включаю следующий.", vo_b3: "Ещё один", vo_b4: "Ставлю ещё один трек.",
   vo_cap: "Пример диалога",
-  sc_kicker: "Понимание экрана", sc_h3: "Mico видит то же, что и вы.",
+  sc_kicker: "Понимание экрана", sc_h3: "Спросите про ошибку на экране и получите решение.",
   sc_p: "Не нужно копировать текст и описывать ситуацию. Просто спросите, и Mico посмотрит на экран и ответит по делу.",
   sc_l1: "<b>Ошибки и предупреждения</b>Объясняет, что означает сообщение, и подсказывает, что делать.",
   sc_l2: "<b>Тексты и страницы</b>Помогает разобраться с тем, что открыто сейчас.",
@@ -1162,18 +1223,18 @@ const RU = {
   sc_b1: "Что значит эта ошибка?",
   sc_b2: "Программа не может подключиться к серверу. Проверьте интернет или перезапустите сервис. Если ошибка повторяется, покажу, где это настроить.",
   sc_cap: "Пример. Ответ зависит от того, что показано на экране.",
-  st_kicker: "Как это работает", st_h2: "Четыре шага от установки до первого вопроса.",
+  st_kicker: "Как это работает", st_h2: "4 шага: скачать, установить, настроить, спросить.",
   st1_h: "Скачайте", st1_p: "Загрузите установщик Mico для Windows по кнопке внизу страницы.",
   st2_h: "Установите", st2_p: "Mico предложит выбрать модели для чата и для экрана.",
   st3_h: "Познакомьтесь", st3_p: "При первом запуске Mico поздоровается, спросит геолокацию для погоды и поможет настроить голос.",
   st4_h: "Работайте", st4_p: "Пишите, говорите или просто смотрите: Mico подскажет, когда это нужно.",
-  sy_kicker: "Система и производительность", sy_h3: "Mico работает рядом, а не поверх всего.",
+  sy_kicker: "Система и производительность", sy_h3: "Вы задаёте размер Mico, автозапуск и тихий режим.",
   sy_p: "Mico создан для Windows и старается не мешать. Вы решаете, сколько места он занимает, включать ли автозапуск и как часто он заговаривает первым.",
   sy_l1: "<b>Гибкие настройки</b>Размер, положение, прозрачность и поведение окна.",
   sy_l2: "<b>Тихий режим</b>Mico может реже комментировать происходящее на экране.",
   sy_l3: "<b>Оптимизация памяти</b>Мы продолжаем уменьшать потребление оперативной памяти.",
   sy_cap: "Mico в спокойном состоянии",
-  md_kicker: "Модели", md_h2: "Выберите модель под свой ПК.",
+  md_kicker: "Модели", md_h2: "Одна модель для чата, другая для экрана.",
   md_lead: "Модели для чата и модели для экрана выбираются отдельно. Загрузка идёт прямо из программы.",
   tag_chat: "Для чата", tag_screen: "Для экрана", tag_tip: "Совет",
   m1_h: "Компактная", m1_p: "Быстро отвечает и не требует много памяти. Подойдёт для ноутбука и повседневных вопросов.",
@@ -1184,26 +1245,26 @@ const RU = {
   m3_l1: "Отдельный список моделей", m3_l2: "Работает по запросу",
   m4_h: "Начните с малого", m4_p: "Если не знаете, что выбрать, скачайте компактную модель. Большую можно добавить позже.",
   m4_l1: "Можно поменять в любой момент", m4_l2: "Модели хранятся на вашем ПК",
-  pk_kicker: "Подбор модели", pk_h2: "Подберём Mico под ваш ПК.",
+  pk_kicker: "Подбор модели", pk_h2: "Выберите память и задачи — получите нужные модели.",
   pk_lead: "Выберите объём памяти и то, как будете пользоваться. Мы подскажем, какие модели скачать и чего ожидать.",
   pk_l1: "1. Оперативная память", pk_l2: "2. Как будете пользоваться",
   pk_cap: "Ориентиры для выбора, а не точные требования. Объём памяти: «Диспетчер задач» → «Производительность» → «Память».",
-  rm_kicker: "Планы развития", rm_h2: "Mico становится умнее каждый день.", rm_small: "В разработке",
+  rm_kicker: "Планы развития", rm_h2: "4 функции в разработке.", rm_small: "В разработке",
   rm1_h: "Расширенные команды Windows", rm1_p: "Больше системных действий по фразе: сеть, экран, звук и питание.",
   rm2_h: "Контекст между сессиями", rm2_p: "Mico будет помнить незавершённые дела и возвращаться к ним.",
   rm3_h: "Новые голоса", rm3_p: "Больше вариантов озвучки и тонкая настройка скорости и интонации.",
   rm4_h: "Английский язык", rm4_p: "Голос и чат на английском языке.",
   free_badge: "<b>Полностью бесплатно</b> — все функции доступны всем<sup>*</sup>",
   free_note: "Сейчас Mico полностью бесплатен, и все его функции доступны всем. Мы не исключаем, что в будущем появятся платные функции и/или подписки.",
-  fa_kicker: "Вопросы и ответы", fa_h2: "Частые вопросы.",
+  fa_kicker: "Вопросы и ответы", fa_h2: "Вопросы о Windows, интернете, данных и памяти.",
   fq1: "Какие версии Windows поддерживаются?", fa1: "Mico работает на Windows 10 и Windows 11.",
   fq2: "Нужен ли интернет?", fa2: "Интернет нужен для загрузки моделей, погоды и голосовых компонентов. Чат с установленными моделями работает локально.",
   fq3: "Мои данные уходят в облако?", fa3: "Модели работают на вашем компьютере. Переписка и память о привычках хранятся локально, и их можно очистить.",
   fq4: "Почему Mico занимает много памяти?", fa4: "Языковые модели требуют оперативной памяти: чем больше модель, тем больше ресурсов ей нужно. Мы работаем над тем, чтобы снизить нагрузку.",
   fq5: "Как выбрать модель?", fa5: "В списке загрузки модели разделены на модели для чата и модели для экрана. Если компьютер не самый мощный, начните с компактной.",
   fq6: "Как удалить Mico?", fa6: "Удалить Mico можно через «Параметры» Windows, как и любое другое приложение.",
-  dl_h2: "Попробуйте Mico.",
-  dl_lead: "Маленький, тёплый и всегда готов помочь. Скачайте его и поставьте на свой компьютер.",
+  dl_h2: "Скачайте Mico для Windows 10 или 11.",
+  dl_lead: "Установщику нужно 20 ГБ свободного места на диске и интернет.",
   dl_btn: "⬇︎ Скачать Mico для Windows",
   dl_meta: "Windows 10 и 11 · файл Mico.exe · около 285 МБ",
   req1: "<b>ОС:</b> Windows 10 или 11. Более старые версии не поддерживаются", req2: "<b>Интернет:</b> для установки и погоды", req4: "<b>Место на диске:</b> 20 ГБ свободного места. При меньшем объёме ответы могут тормозить",
