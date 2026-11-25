@@ -8,12 +8,12 @@ window.MICOSITE = {
   /* Все выпуски: сверху самый новый. Для каждого можно указать свою ссылку url; нет ссылки: берётся download. */
   releases: [
     { version: 2513, date: "2026-11-23", current: true,
-      ru: ["Mico Cloud: 16 лучших ИИ-моделей в трёх уровнях Lite, Plus и Max и режим «Авто», показ остатка нейронов и запросов, без ключей и без нагрузки на процессор",
+      ru: ["Mico Cloud: 27 ИИ-моделей (Cloudflare, Groq, Gemini и NVIDIA) в трёх уровнях Lite, Plus и Max и режим «Авто», показ остатка нейронов и запросов, без ключей и без нагрузки на процессор",
            "В первой настройке можно по-настоящему задать вопрос Mico Cloud и увидеть, какая модель ответила",
            "Зима: снег в настройках и чате, сугробы, ёлки, снеговик, снежные значки и красный колпак с живым помпоном на Mico",
            "Рука в первой настройке тычет прямо в Mico, а он отзывается; новое оформление агента с плитками примеров",
            "Исправлено: при удалении не мигают окна терминала, кнопка «Закрыть» не меняет цвет при наведении"],
-      en: ["Mico Cloud: 16 top AI models in three tiers Lite, Plus and Max plus Auto mode, with a live count of the neurons and requests left, no keys and no processor load",
+      en: ["Mico Cloud: 27 AI models (Cloudflare, Groq, Gemini and NVIDIA) in three tiers Lite, Plus and Max plus Auto mode, with a live count of the neurons and requests left, no keys and no processor load",
            "In first-run setup you can really ask Mico Cloud a question and see which model answered",
            "Winter: snow in settings and chat, snowdrifts, fir trees, a snowman, snowy icons and a red hat with a live pompom on Mico",
            "In first-run setup the hand taps Mico himself and he reacts; a new agent look with example tiles",

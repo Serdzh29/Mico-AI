@@ -32,105 +32,178 @@ footer{border-top:1px solid var(--line);padding:26px 18px calc(30px + env(safe-a
 .en{display:none}html[lang=en] .en{display:revert}html[lang=en] .ru{display:none}
 @media (max-width:520px){.top{gap:8px}.btn.sm{padding:8px 13px}.brand{font-size:16px}.card{padding:18px;border-radius:18px}}
 </style>
+<style id="pv">
+html{scroll-behavior:smooth}
+body{opacity:1;transition:opacity .25s ease}body.leaving{opacity:0}
+/* фон: тёплое сияние */
+.pv-bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.pv-bg i{position:absolute;border-radius:50%;filter:blur(110px);opacity:.34;animation:pvDrift 22s ease-in-out infinite}
+.pv-bg i:nth-child(1){width:52vw;height:52vw;left:-14vw;top:-12vw;background:radial-gradient(circle,rgba(255,173,122,.8),transparent 66%)}
+.pv-bg i:nth-child(2){width:46vw;height:46vw;right:-12vw;top:18vh;background:radial-gradient(circle,rgba(242,217,164,.7),transparent 66%);animation-delay:-8s}
+.pv-bg i:nth-child(3){width:40vw;height:40vw;left:24vw;bottom:-20vw;background:radial-gradient(circle,rgba(255,159,138,.65),transparent 66%);animation-delay:-14s;opacity:.26}
+@keyframes pvDrift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(4vw,-3vw) scale(1.1)}66%{transform:translate(-3vw,3vw) scale(.94)}}
+.pv-prog{position:fixed;left:0;top:0;height:2px;width:100%;z-index:50;transform-origin:0 50%;transform:scaleX(0);background:linear-gradient(90deg,#ffcfa3,#ffad7a,#ff9f8a);box-shadow:0 0 14px rgba(255,173,122,.7)}
+main.pv{position:relative;z-index:1;max-width:1180px;padding:clamp(26px,5vw,64px) clamp(18px,4vw,44px) 80px}
+/* герой */
+.pv-hero{display:flex;align-items:center;gap:clamp(22px,5vw,64px)}
+.pv-hero>*{animation:pvIn 1s cubic-bezier(.16,1,.3,1) both}.pv-ht{animation-delay:.12s}
+@keyframes pvIn{from{opacity:0;transform:translateY(26px);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
+.pv-mico{position:relative;width:clamp(230px,32vw,350px);aspect-ratio:1;flex:none;margin:-20px -30px -20px -40px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+.pv-mico canvas{width:100%;height:100%;display:block}
+.pv-badge{position:absolute;right:15%;bottom:17%;width:clamp(40px,6vw,58px);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:rgba(20,15,12,.92);border:1px solid rgba(242,217,164,.5);box-shadow:0 8px 24px -8px rgba(0,0,0,.8),0 0 30px -8px rgba(242,217,164,.5);animation:pvLock 3.2s ease-in-out infinite;pointer-events:none}
+.pv-badge svg{width:56%;height:56%;fill:none;stroke:#f2d9a4;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.pv-badge svg path:last-child{stroke:#ffcfa3;stroke-width:2.2}
+@keyframes pvLock{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+.pv-kick{display:inline-flex;align-items:center;gap:10px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:700;color:var(--acc);margin-bottom:14px}
+.pv-kick:before{content:"";width:28px;height:1px;background:var(--acc)}
+.pv-ht h1{font-size:clamp(34px,6vw,66px);line-height:1.02;letter-spacing:-.035em;margin:0 0 16px;background:linear-gradient(100deg,#fff 0%,#ffe7d3 45%,#ffcfa3 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.pv-ht .lead{max-width:600px;font-size:clamp(16px,1.5vw,19px);color:var(--t2)}
+/* коротко о главном */
+.pv-glance{margin-top:clamp(36px,6vw,64px)}
+.pv-glance>div{display:grid;grid-template-columns:repeat(3,1fr);gap:0 clamp(24px,4vw,56px)}
+html[lang=en] .pv-glance>.ru,.pv-glance>.en{display:none}html[lang=en] .pv-glance>.en{display:grid}
+.pv-glance .g{border-top:1px solid var(--line);padding:22px 2px 6px;transition:border-color .35s}
+.pv-glance .g:hover{border-top-color:var(--acc)}
+.pv-glance svg{width:28px;height:28px;fill:none;stroke:var(--acc);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;margin-bottom:12px;display:block}
+.pv-glance b{display:block;font-size:19px;letter-spacing:-.01em;margin-bottom:8px}
+.pv-glance p{font-size:14.5px;line-height:1.6;color:var(--t2);margin:0}
+/* сетка: содержание + текст */
+.pv-grid{display:grid;grid-template-columns:230px minmax(0,1fr);gap:clamp(28px,5vw,72px);margin-top:clamp(44px,7vw,84px);align-items:start}
+.pv-toc{position:sticky;top:84px}
+.pv-toc nav{display:flex;flex-direction:column;position:relative;padding-left:2px}
+.pv-toc nav:before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:1px;background:var(--line)}
+html[lang=en] .pv-toc nav.ru,.pv-toc nav.en{display:none}html[lang=en] .pv-toc nav.en{display:flex}
+.pv-toc a{position:relative;display:flex;gap:12px;align-items:baseline;padding:9px 0 9px 18px;font-size:14px;color:var(--t2);transition:color .3s,transform .3s}
+.pv-toc a i{font-style:normal;font-size:11px;letter-spacing:.1em;color:var(--t3);font-variant-numeric:tabular-nums;transition:color .3s}
+.pv-toc a:before{content:"";position:absolute;left:-1px;top:50%;width:2px;height:0;background:var(--acc);transform:translateY(-50%);transition:height .35s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 10px rgba(255,173,122,.7)}
+.pv-toc a:hover{color:var(--t1);text-decoration:none}
+.pv-toc a.on{color:var(--t1);transform:translateX(3px)}.pv-toc a.on i{color:var(--acc)}.pv-toc a.on:before{height:70%}
+/* разделы */
+.pv-doc{min-width:0}
+.ps{scroll-margin-top:90px;margin-bottom:clamp(40px,6vw,72px)}
+.ph{display:flex;align-items:baseline;gap:16px;padding-bottom:16px;margin-bottom:6px;position:relative}
+.ph:after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,var(--acc),rgba(255,255,255,.08) 40%,transparent);transform:scaleX(0);transform-origin:0;transition:transform 1.3s .15s cubic-bezier(.16,1,.3,1)}
+.ph.in:after{transform:scaleX(1)}
+.ph b{font-size:14px;letter-spacing:.14em;color:var(--acc);font-weight:700;font-variant-numeric:tabular-nums}
+.ph h2{margin:0;font-size:clamp(26px,3.4vw,40px);line-height:1.1;letter-spacing:-.03em}
+.pv-doc p{color:#d8d1ca;margin:16px 0;max-width:780px}
+.rows{list-style:none;margin:0;padding:0}
+.rows li{position:relative;margin:0;padding:17px 4px 17px 26px;border-top:1px solid var(--line);color:#d8d1ca;font-size:15.5px;line-height:1.65;transition:border-color .3s,background .3s}
+.rows li:first-child{border-top-color:transparent}
+.rows li:before{content:"";position:absolute;left:4px;top:26px;width:7px;height:7px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 0 rgba(255,173,122,.5);transition:transform .35s cubic-bezier(.2,1.6,.4,1),box-shadow .35s}
+.rows li:hover:before{transform:scale(1.5);box-shadow:0 0 0 6px rgba(255,173,122,.14)}
+.rows li:hover{border-top-color:rgba(255,207,163,.35)}
+.rows li b{color:var(--t1)}
+/* появление при прокрутке */
+html.js .rv{opacity:0;transform:translateY(20px);filter:blur(6px);transition:opacity .8s calc(var(--d,0)*60ms),transform .9s calc(var(--d,0)*60ms) cubic-bezier(.16,1,.3,1),filter .8s calc(var(--d,0)*60ms),border-color .3s,background .3s}
+html.js .rv.in{opacity:1;transform:none;filter:none}
+@media (max-width:900px){
+ .pv-hero{flex-direction:column;text-align:center}.pv-kick{justify-content:center}.pv-ht .lead{margin:0 auto}
+ .pv-glance>div,html[lang=en] .pv-glance>.en{grid-template-columns:1fr}
+ .pv-grid{grid-template-columns:1fr;margin-top:40px}
+ .pv-toc{top:58px;z-index:6;margin:0 calc(-1*clamp(18px,4vw,44px));padding:0 clamp(18px,4vw,44px);background:rgba(11,9,8,.82);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+ .pv-toc::-webkit-scrollbar{display:none}
+ .pv-toc nav{flex-direction:row;gap:4px;padding:0}.pv-toc nav:before{display:none}
+ .pv-toc a{padding:13px 12px;white-space:nowrap}.pv-toc a:before{left:12px;right:12px;top:auto;bottom:-1px;width:auto;height:2px;transform:none;opacity:0}.pv-toc a.on:before{height:2px;opacity:1}.pv-toc a.on{transform:none}
+ .pv-toc a i{display:none}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.pv-bg i,.pv-badge,.pv-hero>*{animation:none}html.js .rv{opacity:1;transform:none;filter:none;transition:none}.ph:after{transform:scaleX(1);transition:none}}
+
+</style>
 </head>
 <body>
+<script>document.documentElement.classList.add("js")</script>
 <header class="top"><a class="brand" href="./" data-keep="./"><img src="favicon-48.png" alt="" width="26" height="26" style="vertical-align:-6px;margin-right:9px">Mico AI</a><div class="r"><div class="lang"><button data-lang="ru">RU</button><button data-lang="en">EN</button></div><a class="btn acc sm dl" href="Mico.exe"><span class="ru">Скачать</span><span class="en">Download</span></a></div></header>
-<main>
-<div class="ru"><h1>Политика приватности</h1><p class="lead">Mico AI работает на твоём компьютере. Ниже: что хранится, что уходит в интернет и чего Mico AI не делает.</p><h2>Что хранится на компьютере</h2>
-<p>Всё лежит в папке <code>%APPDATA%\Mico</code>.</p>
-<ul>
-<li><b>Журнал окон и программ</b> (какое окно было активно и сколько времени). Зашифрован ключом Windows (DPAPI) и библиотекой Fernet.</li>
-<li><b>Журнал команд</b>, которые ты давал Mico. Зашифрован.</li>
-<li><b>Портрет: факты о твоих привычках.</b> Программы, которыми ты пользуешься регулярно, и часто нажимаемые кнопки. Факт появляется, только если повторился не меньше трёх раз. Факты, которые Mico выделил из разговора, сначала ждут твоего подтверждения («подтверди факт N») и не используются, пока ты их не подтвердишь. Посмотреть: «что ты обо мне знаешь». Удалить: «забудь факт N» или «забудь всё обо мне». Зашифрован.</li>
-<li><b>Журнал действий Mico.</b> Что Mico сделал на компьютере по твоей просьбе (без текста PowerShell-скриптов). Посмотреть: «что ты сам сделал?». Зашифрован.</li>
-<li><b>Факты, которые ты сам сказал о себе</b> («меня зовут…», «я работаю…», «запомни, что…»). Сохраняются сразу, без подтверждения, потому что это твои слова. Фразы про здоровье, деньги, адрес, семью и пароли не сохраняются. Посмотреть: «что ты обо мне знаешь». Удалить: «забудь факт N». Зашифрован.</li>
-<li><b>Календарь.</b> События, которые ты записал («запиши в календарь …»). Напоминания о них хранятся как обычные напоминания. Посмотреть: «что в календаре на неделе». Удалить: «удали событие N». Зашифрован.</li>
-<li><b>Счётчики отказов и последнее действие для отмены</b> лежат в <code>config.json</code> и <b>не зашифрованы</b>. Там только имя действия и его параметры, например название службы.</li>
-<li><b>Исправления опечаток и твой словарь.</b> Зашифрованы.</li>
-<li><b>Напоминания.</b> Зашифрованы.</li>
-<li><b>Режим агента (BETA, выключен по умолчанию).</b> Агент читает названия кнопок и полей в активном окне, чтобы выбрать следующий шаг. Эти данные передаются только локальной модели, в облако не уходят. Пароли и поля паролей агент не трогает, окна банков и кошельков пропускает. Перед отправкой, оплатой, публикацией и удалением спрашивает «да».</li>
-<li><b>Звук и корзина.</b> Mico смотрит, играет ли звук у программ, и считает число элементов в корзине, чтобы танцевать и «есть» файлы. Ничего из этого не сохраняется и никуда не отправляется.</li>
-<li><b>Облако Mico (ключей нет).</b> При первом обращении к облаку программа получает у сайта Mico AI личный токен установки и хранит его в защищённом хранилище Windows. Токен нужен для дневных лимитов, в нём нет сведений о тебе.</li>
-<li><b>Настройки</b> (<code>config.json</code>). <b>Не зашифрованы.</b></li>
-<li><b>Журнал запуска</b> (<code>launch.log</code>, <code>startup.log</code>, <code>crash.log</code>) лежит открытым текстом. В журналах нет твоих переписок и паролей, но могут быть пути к файлам.</li>
-<li><b>Скриншоты</b>, которые ты просил сделать, сохраняются в <code>Изображения\Mico</code>.</li>
+<div class="pv-bg" aria-hidden="true"><i></i><i></i><i></i></div><div class="pv-prog" id="pvProg"></div>
+<main class="pv">
+<section class="pv-hero">
+ <div class="pv-mico" id="pvMico"><canvas id="pvLive" aria-label="Mico" role="img"></canvas><span class="pv-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg></span><div class="pv-sh"></div></div>
+ <div class="pv-ht">
+  <div class="ru"><span class="pv-kick">Приватность</span><h1>Политика приватности</h1><p class="lead">Mico AI живёт на твоём компьютере. Ниже: что хранится, что уходит в интернет и чего Mico AI не делает.</p></div>
+  <div class="en"><span class="pv-kick">Privacy</span><h1>Privacy policy</h1><p class="lead">Mico AI lives on your computer. Below: what is stored, what goes to the internet and what Mico AI does not do.</p></div>
+ </div>
+</section>
+<div class="pv-glance"><div class="ru"><div class="g rv" style="--d:0"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8 20h8M12 16v4"/><path d="m9 10 2 2 4-4"/></svg><b>Остаётся на ПК</b><p>Журналы, привычки, календарь и напоминания лежат в зашифрованном виде в папке <code>%APPDATA%\Mico</code>. Фразы про пароли, деньги и здоровье Mico не запоминает.</p></div><div class="g rv" style="--d:1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 9.5 4 4 0 0 1 17.5 18z"/></svg><b>Уходит в сеть только по необходимости</b><p>Текст чата уходит в облако, если выбрано «Облако Mico». Ещё поиск, погода и номер версии при запуске. С локальной моделью чат остаётся на ПК.</p></div><div class="g rv" style="--d:2"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg><b>Не делает никогда</b><p>Не читает переписки и почту, не следит за клавишами, не шлёт статистику и сбои и не отправляет снимки экрана в облако.</p></div></div><div class="en"><div class="g rv" style="--d:0"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8 20h8M12 16v4"/><path d="m9 10 2 2 4-4"/></svg><b>Stays on your PC</b><p>Logs, habits, calendar and reminders are stored encrypted in <code>%APPDATA%\Mico</code>. Mico does not remember phrases about passwords, money or health.</p></div><div class="g rv" style="--d:1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 9.5 4 4 0 0 1 17.5 18z"/></svg><b>Goes online only when needed</b><p>Chat text goes to the cloud when Mico Cloud is selected. Plus search, weather and the version number on launch. With the local model the chat stays on your PC.</p></div><div class="g rv" style="--d:2"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg><b>Never does</b><p>Does not read conversations or mail, does not log key presses, does not send statistics or crash reports and never sends screenshots to the cloud.</p></div></div></div>
+<div class="pv-grid">
+ <aside class="pv-toc"><nav class="ru" aria-label="Содержание"><a href="#ru-s1" data-t="ru-s1"><i>01</i><span>Что хранится на компьютере</span></a><a href="#ru-s2" data-t="ru-s2"><i>02</i><span>Что уходит в интернет</span></a><a href="#ru-s3" data-t="ru-s3"><i>03</i><span>Чего Mico AI не делает</span></a><a href="#ru-s4" data-t="ru-s4"><i>04</i><span>Твои права</span></a><a href="#ru-s5" data-t="ru-s5"><i>05</i><span>Известные ограничения</span></a></nav><nav class="en" aria-label="Contents"><a href="#en-s1" data-t="en-s1"><i>01</i><span>What is stored on your computer</span></a><a href="#en-s2" data-t="en-s2"><i>02</i><span>What goes to the internet</span></a><a href="#en-s3" data-t="en-s3"><i>03</i><span>What Mico AI does not do</span></a><a href="#en-s4" data-t="en-s4"><i>04</i><span>Your rights</span></a><a href="#en-s5" data-t="en-s5"><i>05</i><span>Known limitations</span></a></nav></aside>
+ <div class="pv-doc"><div class="ru"><section class="ps" id="ru-s1"><div class="ph rv"><b>01</b><h2>Что хранится на компьютере</h2></div><p class="rv">Всё лежит в папке <code>%APPDATA%\Mico</code>.</p>
+<ul class="rows">
+<li class="rv" style="--d:1"><b>Журнал окон и программ</b> (какое окно было активно и сколько времени). Зашифрован ключом Windows (DPAPI) и библиотекой Fernet.</li>
+<li class="rv" style="--d:2"><b>Журнал команд</b>, которые ты давал Mico. Зашифрован.</li>
+<li class="rv" style="--d:3"><b>Портрет: факты о твоих привычках.</b> Программы, которыми ты пользуешься регулярно, и часто нажимаемые кнопки. Факт появляется, только если повторился не меньше трёх раз. Факты, которые Mico выделил из разговора, сначала ждут твоего подтверждения («подтверди факт N») и не используются, пока ты их не подтвердишь. Посмотреть: «что ты обо мне знаешь». Удалить: «забудь факт N» или «забудь всё обо мне». Зашифрован.</li>
+<li class="rv" style="--d:4"><b>Журнал действий Mico.</b> Что Mico сделал на компьютере по твоей просьбе (без текста PowerShell-скриптов). Посмотреть: «что ты сам сделал?». Зашифрован.</li>
+<li class="rv" style="--d:5"><b>Факты, которые ты сам сказал о себе</b> («меня зовут…», «я работаю…», «запомни, что…»). Сохраняются сразу, без подтверждения, потому что это твои слова. Фразы про здоровье, деньги, адрес, семью и пароли не сохраняются. Посмотреть: «что ты обо мне знаешь». Удалить: «забудь факт N». Зашифрован.</li>
+<li class="rv" style="--d:0"><b>Календарь.</b> События, которые ты записал («запиши в календарь …»). Напоминания о них хранятся как обычные напоминания. Посмотреть: «что в календаре на неделе». Удалить: «удали событие N». Зашифрован.</li>
+<li class="rv" style="--d:1"><b>Счётчики отказов и последнее действие для отмены</b> лежат в <code>config.json</code> и <b>не зашифрованы</b>. Там только имя действия и его параметры, например название службы.</li>
+<li class="rv" style="--d:2"><b>Исправления опечаток и твой словарь.</b> Зашифрованы.</li>
+<li class="rv" style="--d:3"><b>Напоминания.</b> Зашифрованы.</li>
+<li class="rv" style="--d:4"><b>Режим агента (BETA, выключен по умолчанию).</b> Агент читает названия кнопок и полей в активном окне, чтобы выбрать следующий шаг. Если выбрана локальная модель, эти данные остаются на ПК. Если выбрано «Облако Mico» (по умолчанию) или облачный API, названия кнопок и полей активного окна, заголовок окна и задача уходят в облако вместе с запросом на следующий шаг. Снимки экрана в облако не отправляются. Пароли и поля паролей агент не трогает, окна банков и кошельков пропускает. Перед отправкой, оплатой, публикацией и удалением спрашивает «да».</li>
+<li class="rv" style="--d:5"><b>Звук и корзина.</b> Mico смотрит, играет ли звук у программ, и считает число элементов в корзине, чтобы танцевать и «есть» файлы. Ничего из этого не сохраняется и никуда не отправляется.</li>
+<li class="rv" style="--d:0"><b>Облако Mico (ключей нет).</b> При первом обращении к облаку программа получает у сайта Mico AI личный токен установки и хранит его в защищённом хранилище Windows. Токен нужен для дневных лимитов, в нём нет сведений о тебе.</li>
+<li class="rv" style="--d:1"><b>Настройки</b> (<code>config.json</code>). <b>Не зашифрованы.</b></li>
+<li class="rv" style="--d:2"><b>Журнал запуска</b> (<code>launch.log</code>, <code>startup.log</code>, <code>crash.log</code>) лежит открытым текстом. В журналах нет твоих переписок и паролей, но могут быть пути к файлам.</li>
+<li class="rv" style="--d:3"><b>Скриншоты</b>, которые ты просил сделать, сохраняются в <code>Изображения\Mico</code>.</li>
 </ul>
-<p>Срок хранения журнала задаётся в настройках. Пункта «Удалить всю историю» в меню Mico AI больше нет: журналы стираются по сроку хранения, заданному в настройках.</p>
-<h2>Что уходит в интернет</h2>
-<p>Только то, что нужно для функции и только когда она включена:</p>
-<ul>
-<li><b>Погода.</b> Координаты уходят в Open-Meteo.</li>
-<li><b>Проверка новой версии.</b> При каждом запуске Mico AI запрашивает у сайта Mico AI (serdzh29.github.io/Mico-AI) номер последней версии. Ничего о тебе не отправляется, кроме обычных данных HTTP-запроса (например, IP-адреса). Если на сайте версия новее, чат закрывается просьбой обновить Mico AI. Без сети или при сбое сайта Mico AI работает как обычно. Эту проверку нельзя отключить в настройках.</li>
-<li><b>Геолокация.</b> Координаты берутся службой геолокации Windows, которая работает по правилам Microsoft. Mico AI получает только координаты.</li>
-<li><b>Обновления Windows.</b> Mico AI спрашивает у Windows, есть ли обновления. Сам запрос идёт в Microsoft через Windows.</li>
-<li><b>Поиск в интернете</b> («найди в интернете …», «какие новости сегодня», «загугли …», «открой ютуб и включи видео»). Выключается в ⚙ Настройки → Основные. В сеть уходит только текст поиска: для сайтов и ответов — DuckDuckGo, для видео — YouTube. Страница открывается в твоём браузере, данные о тебе не добавляются. Для короткого ответа Mico открывает первые две страницы из выдачи и берёт из них текст. Этот текст и описания из выдачи уходят в выбранную модель (локальную или облако Mico). Ничего из этого не сохраняется.</li>
-<li><b>Облако Mico (по умолчанию).</b> Текст чата и его короткая история уходят на сервер Mico AI на Cloudflare, оттуда в Cloudflare Workers AI или, для части запросов, в Groq, Google Gemini или NVIDIA, где модель формирует ответ. Режим «Авто» выбирает уровень Lite, Plus или Max по сложности вопроса. Можно переключиться на локальную модель: тогда в сеть ничего не уходит. Данные окон и команд для компьютера в облако не идут. Когда дневная доля облака заканчивается, Mico отвечает локальной моделью (если скачана) или командами для компьютера.</li>
-<li><b>Снимок экрана.</b> Mico не отправляет снимки экрана в облако и не рассматривает экран через интернет.</li>
-<li>Данные других окон и действия Windows остаются на ПК.</li>
+<p class="rv">Срок хранения журнала задаётся в настройках. Пункта «Удалить всю историю» в меню Mico AI больше нет: журналы стираются по сроку хранения, заданному в настройках.</p></section><section class="ps" id="ru-s2"><div class="ph rv"><b>02</b><h2>Что уходит в интернет</h2></div><p class="rv">Только то, что нужно для функции и только когда она включена:</p>
+<ul class="rows">
+<li class="rv" style="--d:1"><b>Погода.</b> Координаты уходят в Open-Meteo.</li>
+<li class="rv" style="--d:2"><b>Проверка новой версии.</b> При каждом запуске Mico AI запрашивает у сайта Mico AI (serdzh29.github.io/Mico-AI) номер последней версии. Ничего о тебе не отправляется, кроме обычных данных HTTP-запроса (например, IP-адреса). Если на сайте версия новее, чат закрывается просьбой обновить Mico AI. Без сети или при сбое сайта Mico AI работает как обычно. Эту проверку нельзя отключить в настройках.</li>
+<li class="rv" style="--d:3"><b>Геолокация.</b> Координаты берутся службой геолокации Windows, которая работает по правилам Microsoft. Mico AI получает только координаты.</li>
+<li class="rv" style="--d:4"><b>Обновления Windows.</b> Mico AI спрашивает у Windows, есть ли обновления. Сам запрос идёт в Microsoft через Windows.</li>
+<li class="rv" style="--d:5"><b>Поиск в интернете</b> («найди в интернете …», «какие новости сегодня», «загугли …», «открой ютуб и включи видео»). Выключается в ⚙ Настройки → Основные. В сеть уходит только текст поиска: для сайтов и ответов — DuckDuckGo, для видео — YouTube. Страница открывается в твоём браузере, данные о тебе не добавляются. Для короткого ответа Mico открывает первые две страницы из выдачи и берёт из них текст. Этот текст и описания из выдачи уходят в выбранную модель (локальную или облако Mico). Ничего из этого не сохраняется.</li>
+<li class="rv" style="--d:0"><b>Облако Mico (по умолчанию).</b> Текст чата и его короткая история уходят на сервер Mico AI на Cloudflare, оттуда в Cloudflare Workers AI или, для части запросов, в Groq, Google Gemini или NVIDIA, где модель формирует ответ. Режим «Авто» выбирает уровень Lite, Plus или Max по сложности вопроса. Можно переключиться на локальную модель: тогда в сеть ничего не уходит. Данные окон и команд для компьютера в облако не идут, кроме режима агента: при включённом агенте названия кнопок и полей активного окна уходят в облако (см. выше). Когда дневная доля облака заканчивается, Mico отвечает локальной моделью (если скачана) или командами для компьютера.</li>
+<li class="rv" style="--d:1"><b>Снимок экрана.</b> Mico не отправляет снимки экрана в облако и не рассматривает экран через интернет.</li>
+<li class="rv" style="--d:2">Данные других окон и действия Windows остаются на ПК. Исключение: включённый режим агента при облачной модели (см. выше).</li>
 </ul>
-<p>Все ответы и перевод выполняются локально на компьютере. Отдельно работают функции из раздела «Что уходит в интернет»: в сеть отправляются только необходимые для них данные, например поисковый запрос.</p>
-<h2>Чего Mico AI не делает</h2>
-<ul>
-<li>Не читает переписку в мессенджерах, почту и содержимое других программ.</li>
-<li>Не отслеживает нажатия клавиш. Учится только на том, что ты пишешь самому Mico.</li>
-<li>Не отправляет статистику и сбои разработчику.</li>
+<p class="rv">Если выбрана локальная модель, ответы и перевод выполняются на компьютере. Отдельно работают функции из раздела «Что уходит в интернет»: в сеть отправляются только необходимые для них данные, например поисковый запрос.</p></section><section class="ps" id="ru-s3"><div class="ph rv"><b>03</b><h2>Чего Mico AI не делает</h2></div><ul class="rows">
+<li class="rv" style="--d:1">Не читает переписку в мессенджерах, почту и содержимое других программ.</li>
+<li class="rv" style="--d:2">Не отслеживает нажатия клавиш. Учится только на том, что ты пишешь самому Mico.</li>
+<li class="rv" style="--d:3">Не отправляет статистику и сбои разработчику.</li>
+</ul></section><section class="ps" id="ru-s4"><div class="ph rv"><b>04</b><h2>Твои права</h2></div><p class="rv">Удаление: «Параметры → Приложения → Mico AI» или меню Mico AI → «Удалить Mico AI». Программа предложит удалить и данные (папка <code>%APPDATA%\Mico</code>) или сохранить их.</p>
+<p class="rv">Ты можешь отключить любую функцию в настройках, удалить историю из меню, сбросить привычки кнопок и удалить папку <code>%APPDATA%\Mico</code>.</p></section><section class="ps" id="ru-s5"><div class="ph rv"><b>05</b><h2>Известные ограничения</h2></div><ul class="rows">
+<li class="rv" style="--d:1">Журналы запуска создаются при каждом старте. Их можно удалить вручную.</li>
+<li class="rv" style="--d:2">Фильтр запрещённых тем не идеален. Если что-то просочилось, сообщи разработчику, и список пополнят.</li>
 </ul>
-<h2>Твои права</h2>
-<p>Удаление: «Параметры → Приложения → Mico AI» или меню Mico AI → «Удалить Mico AI». Программа предложит удалить и данные (папка <code>%APPDATA%\Mico</code>) или сохранить их.</p>
-<p>Ты можешь отключить любую функцию в настройках, удалить историю из меню, сбросить привычки кнопок и удалить папку <code>%APPDATA%\Mico</code>.</p>
-<h2>Известные ограничения</h2>
-<ul>
-<li>Журналы запуска создаются при каждом старте. Их можно удалить вручную.</li>
-<li>Фильтр запрещённых тем не идеален. Если что-то просочилось, сообщи разработчику, и список пополнят.</li>
+<p class="rv">Эта политика описывает версию, указанную в <code>version.py</code>. Если функция меняется, политика обновляется вместе с ней.</p></section></div><div class="en"><section class="ps" id="en-s1"><div class="ph rv"><b>01</b><h2>What is stored on your computer</h2></div><p class="rv">Everything lives in the <code>%APPDATA%\Mico</code> folder.</p>
+<ul class="rows">
+<li class="rv" style="--d:1"><b>Window and app log</b> (which window was active and for how long). Encrypted with a Windows key (DPAPI) and the Fernet library.</li>
+<li class="rv" style="--d:2"><b>Command log</b> of what you asked Mico to do. Encrypted.</li>
+<li class="rv" style="--d:3"><b>Portrait: facts about your habits.</b> Apps you use regularly and buttons you press often. A fact appears only after it repeats at least three times. Facts Mico picked out of a conversation are shown to you first and are saved only with your approval.</li>
+<li class="rv" style="--d:4"><b>Mico action log.</b> What Mico did on the computer at your request (without the text of PowerShell scripts). Ask: “what did you do yourself?”. Encrypted.</li>
+<li class="rv" style="--d:5"><b>Facts you told about yourself</b> (“my name is…”, “I work as…”, “remember that…”). Saved at once, without confirmation, because these are your own words. Phrases about health, money, address, family and passwords are not saved.</li>
+<li class="rv" style="--d:0"><b>Calendar.</b> Events you added (“add to the calendar …”). Reminders for them are stored as ordinary reminders. Ask: “what is on the calendar this week”. Delete: “delete event N”. Encrypted.</li>
+<li class="rv" style="--d:1"><b>Refusal counters and the last undoable action</b> are kept in <code>config.json</code> and are <b>not encrypted</b>. They contain only the action name and its parameters, for example a service name.</li>
+<li class="rv" style="--d:2"><b>Typo corrections and your dictionary.</b> Encrypted.</li>
+<li class="rv" style="--d:3"><b>Reminders.</b> Encrypted.</li>
+<li class="rv" style="--d:4"><b>Agent mode (BETA, off by default).</b> The agent reads the names of buttons and fields in the active window to choose the next step. With the local model this data stays on your PC. With Mico Cloud (default) or a cloud API, the names of buttons and fields of the active window, the window title and the task go to the cloud together with the request for the next step. Screenshots are never sent to the cloud. Password fields and bank or wallet windows are not touched.</li>
+<li class="rv" style="--d:5"><b>Sound and recycle bin.</b> Mico checks whether apps are playing sound and counts items in the recycle bin so that it can dance and “eat” files. None of this is saved or sent anywhere.</li>
+<li class="rv" style="--d:0"><b>Mico Cloud (no keys).</b> On the first cloud request the program gets a personal installation token from the Mico AI site and keeps it in the Windows protected store. The token is used for daily limits and holds no information about you.</li>
+<li class="rv" style="--d:1"><b>Settings</b> (<code>config.json</code>). <b>Not encrypted.</b></li>
+<li class="rv" style="--d:2"><b>Launch logs</b> (<code>launch.log</code>, <code>startup.log</code>, <code>crash.log</code>) are plain text. They contain no conversations or passwords, but may contain file paths.</li>
+<li class="rv" style="--d:3"><b>Screenshots</b> you asked for are saved to <code>Pictures\Mico</code>.</li>
 </ul>
-<p>Эта политика описывает версию, указанную в <code>version.py</code>. Если функция меняется, политика обновляется вместе с ней.</p></div><div class="en"><h1>Privacy policy</h1><p class="lead">Mico AI runs on your computer. Below: what is stored, what goes to the internet and what Mico AI does not do.</p><h2>What is stored on your computer</h2>
-<p>Everything lives in the <code>%APPDATA%\Mico</code> folder.</p>
-<ul>
-<li><b>Window and app log</b> (which window was active and for how long). Encrypted with a Windows key (DPAPI) and the Fernet library.</li>
-<li><b>Command log</b> of what you asked Mico to do. Encrypted.</li>
-<li><b>Portrait: facts about your habits.</b> Apps you use regularly and buttons you press often. A fact appears only after it repeats at least three times. Facts Mico picked out of a conversation are shown to you first and are saved only with your approval.</li>
-<li><b>Mico action log.</b> What Mico did on the computer at your request (without the text of PowerShell scripts). Ask: “what did you do yourself?”. Encrypted.</li>
-<li><b>Facts you told about yourself</b> (“my name is…”, “I work as…”, “remember that…”). Saved at once, without confirmation, because these are your own words. Phrases about health, money, address, family and passwords are not saved.</li>
-<li><b>Calendar.</b> Events you added (“add to the calendar …”). Reminders for them are stored as ordinary reminders. Ask: “what is on the calendar this week”. Delete: “delete event N”. Encrypted.</li>
-<li><b>Refusal counters and the last undoable action</b> are kept in <code>config.json</code> and are <b>not encrypted</b>. They contain only the action name and its parameters, for example a service name.</li>
-<li><b>Typo corrections and your dictionary.</b> Encrypted.</li>
-<li><b>Reminders.</b> Encrypted.</li>
-<li><b>Agent mode (BETA, off by default).</b> The agent reads the names of buttons and fields in the active window to choose the next step. This data goes only to the local model and never to the cloud. Password fields and bank or wallet windows are not touched.</li>
-<li><b>Sound and recycle bin.</b> Mico checks whether apps are playing sound and counts items in the recycle bin so that it can dance and “eat” files. None of this is saved or sent anywhere.</li>
-<li><b>Mico Cloud (no keys).</b> On the first cloud request the program gets a personal installation token from the Mico AI site and keeps it in the Windows protected store. The token is used for daily limits and holds no information about you.</li>
-<li><b>Settings</b> (<code>config.json</code>). <b>Not encrypted.</b></li>
-<li><b>Launch logs</b> (<code>launch.log</code>, <code>startup.log</code>, <code>crash.log</code>) are plain text. They contain no conversations or passwords, but may contain file paths.</li>
-<li><b>Screenshots</b> you asked for are saved to <code>Pictures\Mico</code>.</li>
+<p class="rv">The log retention period is set in the settings. The “Delete all history” menu item no longer exists: logs are erased according to the retention period from the settings.</p></section><section class="ps" id="en-s2"><div class="ph rv"><b>02</b><h2>What goes to the internet</h2></div><p class="rv">Only what a feature needs, and only while that feature is on:</p>
+<ul class="rows">
+<li class="rv" style="--d:1"><b>Weather.</b> Coordinates go to Open-Meteo.</li>
+<li class="rv" style="--d:2"><b>Version check.</b> On every launch Mico AI asks the Mico AI website (serdzh29.github.io/Mico-AI) for the number of the latest version. Nothing about you is sent except the usual HTTP request data (for example, the IP address). If the site has a newer version, the chat is closed with a request to update Mico AI. Without a network or when the site fails, Mico AI works as usual. This check cannot be switched off in the settings.</li>
+<li class="rv" style="--d:3"><b>Location.</b> Coordinates are taken by the Windows location service, which follows Microsoft rules. Mico AI receives only the coordinates.</li>
+<li class="rv" style="--d:4"><b>Windows updates.</b> Mico AI asks Windows whether updates exist. The request itself goes to Microsoft through Windows.</li>
+<li class="rv" style="--d:5"><b>Web search</b> (“find on the internet …”, “what is the news today”, “google …”, “open YouTube and play a video”). Can be turned off in ⚙ Settings → General. Only the search text goes out: to DuckDuckGo for sites and answers, and to the video service you named for videos.</li>
+<li class="rv" style="--d:0"><b>Mico Cloud (default).</b> The chat text and its short history go to the Mico AI server on Cloudflare, and from there to Cloudflare Workers AI or, for some requests, to Groq, Google Gemini or NVIDIA, where the model writes the answer. “Auto” picks the Lite, Plus or Max tier by how hard the question is. You can switch to the local model: then nothing leaves your PC. Window data and PC commands never go to the cloud, except in agent mode: with the agent on, the names of buttons and fields of the active window go to the cloud (see above). When the daily cloud share runs out, Mico answers with the local model (if downloaded) or with PC commands.</li>
+<li class="rv" style="--d:1"><b>Screenshots.</b> Mico never sends screenshots to the cloud and does not look at the screen over the internet.</li>
+<li class="rv" style="--d:2">Data from other windows and Windows actions stay on the PC. The exception is agent mode with a cloud model (see above).</li>
 </ul>
-<p>The log retention period is set in the settings. The “Delete all history” menu item no longer exists: logs are erased according to the retention period from the settings.</p>
-<h2>What goes to the internet</h2>
-<p>Only what a feature needs, and only while that feature is on:</p>
-<ul>
-<li><b>Weather.</b> Coordinates go to Open-Meteo.</li>
-<li><b>Version check.</b> On every launch Mico AI asks the Mico AI website (serdzh29.github.io/Mico-AI) for the number of the latest version. Nothing about you is sent except the usual HTTP request data (for example, the IP address). If the site has a newer version, the chat is closed with a request to update Mico AI. Without a network or when the site fails, Mico AI works as usual. This check cannot be switched off in the settings.</li>
-<li><b>Location.</b> Coordinates are taken by the Windows location service, which follows Microsoft rules. Mico AI receives only the coordinates.</li>
-<li><b>Windows updates.</b> Mico AI asks Windows whether updates exist. The request itself goes to Microsoft through Windows.</li>
-<li><b>Web search</b> (“find on the internet …”, “what is the news today”, “google …”, “open YouTube and play a video”). Can be turned off in ⚙ Settings → General. Only the search text goes out: to DuckDuckGo for sites and answers, and to the video service you named for videos.</li>
-<li><b>Mico Cloud (default).</b> The chat text and its short history go to the Mico AI server on Cloudflare, and from there to Cloudflare Workers AI or, for some requests, to Groq, Google Gemini or NVIDIA, where the model writes the answer. “Auto” picks the Lite, Plus or Max tier by how hard the question is. You can switch to the local model: then nothing leaves your PC. Window data and PC commands never go to the cloud. When the daily cloud share runs out, Mico answers with the local model (if downloaded) or with PC commands.</li>
-<li><b>Screenshots.</b> Mico never sends screenshots to the cloud and does not look at the screen over the internet.</li>
-<li>Data from other windows and Windows actions stay on the PC.</li>
+<p class="rv">With the local model, answers and translation are produced on the computer. The features from the “What goes to the internet” section work separately: only the data they need is sent, for example a search query.</p></section><section class="ps" id="en-s3"><div class="ph rv"><b>03</b><h2>What Mico AI does not do</h2></div><ul class="rows">
+<li class="rv" style="--d:1">Does not read messenger conversations, mail or the contents of other programs.</li>
+<li class="rv" style="--d:2">Does not log key presses. It learns only from what you write to Mico itself.</li>
+<li class="rv" style="--d:3">Does not send statistics or crash reports to the developer.</li>
+</ul></section><section class="ps" id="en-s4"><div class="ph rv"><b>04</b><h2>Your rights</h2></div><p class="rv">Removal: “Settings → Apps → Mico AI” or the Mico AI menu → “Uninstall Mico AI”. The program offers to delete the data too (the <code>%APPDATA%\Mico</code> folder) or keep it.</p>
+<p class="rv">You can turn off any feature in the settings, delete history from the menu, reset button habits and delete the <code>%APPDATA%\Mico</code> folder.</p></section><section class="ps" id="en-s5"><div class="ph rv"><b>05</b><h2>Known limitations</h2></div><ul class="rows">
+<li class="rv" style="--d:1">Launch logs are created on every start. They can be deleted by hand.</li>
+<li class="rv" style="--d:2">The filter for forbidden topics is not perfect. If something slips through, tell the developer and the list will be extended.</li>
 </ul>
-<p>All answers and translation are produced locally on the computer. The features from the “What goes to the internet” section work separately: only the data they need is sent, for example a search query.</p>
-<h2>What Mico AI does not do</h2>
-<ul>
-<li>Does not read messenger conversations, mail or the contents of other programs.</li>
-<li>Does not log key presses. It learns only from what you write to Mico itself.</li>
-<li>Does not send statistics or crash reports to the developer.</li>
-</ul>
-<h2>Your rights</h2>
-<p>Removal: “Settings → Apps → Mico AI” or the Mico AI menu → “Uninstall Mico AI”. The program offers to delete the data too (the <code>%APPDATA%\Mico</code> folder) or keep it.</p>
-<p>You can turn off any feature in the settings, delete history from the menu, reset button habits and delete the <code>%APPDATA%\Mico</code> folder.</p>
-<h2>Known limitations</h2>
-<ul>
-<li>Launch logs are created on every start. They can be deleted by hand.</li>
-<li>The filter for forbidden topics is not perfect. If something slips through, tell the developer and the list will be extended.</li>
-</ul>
-<p>This policy describes the version listed in <code>version.py</code>. When a feature changes, the policy is updated with it.</p></div>
+<p class="rv">This policy describes the version listed in <code>version.py</code>. When a feature changes, the policy is updated with it.</p></section></div></div>
+</div>
 </main>
 <footer><span>© 2026 Mico AI</span><a href="privacy.html" data-keep="privacy.html"><span class="ru">Политика конфиденциальности</span><span class="en">Privacy policy</span></a><a href="license.html" data-keep="license.html"><span class="ru">Лицензия MIT</span><span class="en">MIT license</span></a><a href="versions.html" data-keep="versions.html"><span class="ru">Все версии</span><span class="en">All versions</span></a><a href="./" data-keep="./"><span class="ru">На главную</span><span class="en">Home</span></a></footer>
 <script>
@@ -144,6 +217,255 @@ document.querySelectorAll(".lang button").forEach(function(b){b.addEventListener
 var L=(q==="en"||q==="ru")?q:((navigator.language||"ru").slice(0,2)==="en"?"en":"ru");set(L);
 var dl=(window.MICOSITE&&MICOSITE.download)||"Mico.exe";document.querySelectorAll("a.dl").forEach(function(a){a.href=a.getAttribute("data-url")||dl});
 if(window.renderReleases)renderReleases(L,set)})();
+</script>
+<script>
+/* Mico AI: живой Mico для сайта. Порт отрисовки из приложения (ui/blob.py): форма-«камушек» с плывущими гармониками,
+   дыхание, покачивание головы, моргание, взгляд за курсором, дрейф лица, независимые брови, радость, растерянность и прыжок. */
+(function(){
+var TAU=Math.PI*2,N=96,HEAD_MAX=7;
+var TILT={curious:7,sad:-4,worried:-3,thinking:4,proud:-6,playful:5,confused:6};
+function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function rnd(a,b){return a+Math.random()*(b-a)}
+function mix(a,b,k){return [a[0]*(1-k)+b[0]*k,a[1]*(1-k)+b[1]*k,a[2]*(1-k)+b[2]*k]}
+function rgba(c,a){return "rgba("+(c[0]|0)+","+(c[1]|0)+","+(c[2]|0)+","+a+")"}
+function hex(h){h=h.replace("#","");return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]}
+function pulse(x,a,b){return (x<=a||x>=b)?0:Math.sin(Math.PI*(x-a)/(b-a))}
+function easeOutBack(x){x=clamp(x,0,1);var c1=1.70158,c3=2.70158;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)}
+function pebble(a,wob,t,k){
+ var r=1+(0.085+0.025*k*Math.sin(t*0.35))*Math.sin(2*a+0.9+0.55*k*Math.sin(t*0.23))
+  +(0.055+0.02*k*Math.sin(t*0.41+1))*Math.sin(3*a+2.1+0.6*k*Math.sin(t*0.31+2))
+  +0.025*Math.sin(5*a+0.3*k*Math.sin(t*0.5));
+ return r+wob*(0.012*Math.sin(3*a+t*2)+0.01*Math.sin(4*a-t*1.6));
+}
+/* Дуга по правилам Qt: углы против часовой стрелки от «3 часов», ось y вниз */
+function arcQt(c,cx,cy,rx,ry,start,span){
+ var s=start*Math.PI/180,e=(start+span)*Math.PI/180;
+ c.ellipse(cx,cy,Math.abs(rx),Math.abs(ry),0,-s,-e,true);
+}
+function Mico(canvas,opt){
+ opt=opt||{};
+ this.cv=canvas;this.c=canvas.getContext("2d");
+ this.col=hex(opt.color||"#FFCFA3");
+ this.baseMood=opt.mood||"idle";this.mood=this.baseMood;this.moodUntil=0;
+ this.t0=performance.now()/1000;this.last=this.t0;
+ this.anim=null;this.nextIdle=this.t0+4;
+ this.blinkAt=this.t0+2.5;this.blinkStart=0;this.blinkUntil=0;this.lid=1;
+ this.jh=0;this.jv=0;this.squash=0;this.squashV=0;this.tilt=0;
+ this.brow={l:0,r:0,tl:0,tr:0,gl:0,gr:0,gtl:0,gtr:0,until:0};
+ this.face={dx:0,dy:0,gx:0,gy:0,until:0};
+ this.px=null;this.py=null;this.tiltDir=1;
+ this.appear=opt.appear!==false?{start:this.t0,dur:0.9}:null;
+ this.running=false;this.visible=true;this.size=0;this.dpr=1;
+ var self=this;
+ this.onMove=function(e){self.px=e.clientX;self.py=e.clientY};
+ this.onTouch=function(e){var t=e.touches&&e.touches[0];if(t){self.px=t.clientX;self.py=t.clientY}};
+ addEventListener("pointermove",this.onMove,{passive:true});addEventListener("touchmove",this.onTouch,{passive:true});
+ this.resize();addEventListener("resize",function(){self.resize()});
+ if("IntersectionObserver" in window){new IntersectionObserver(function(es){self.visible=es[0].isIntersecting;if(self.visible&&!self.running)self.start()}).observe(canvas)}
+ this.start();
+}
+Mico.prototype.resize=function(){
+ var r=this.cv.getBoundingClientRect(),d=Math.min(2,window.devicePixelRatio||1),s=Math.max(60,Math.round(r.width));
+ this.size=s;this.dpr=d;this.cv.width=Math.round(s*d);this.cv.height=Math.round(s*d);
+};
+Mico.prototype.start=function(){
+ if(this.running)return;this.running=true;var self=this;
+ (function loop(){
+  if(!self.visible||document.hidden){self.running=false;return}
+  self.frame(performance.now()/1000);requestAnimationFrame(loop)})();
+};
+Mico.prototype.setMood=function(m,secs){this.mood=m;this.moodUntil=secs?performance.now()/1000+secs:0};
+Mico.prototype.jump=function(p){this.jv=p||280};
+Mico.prototype.startAnim=function(n){
+ var dur={lookaround:2.6,blink2:0.6,wink:0.9,headtilt:1.8}[n]||1;
+ if(n==="headtilt")this.tiltDir=Math.random()<.5?-1:1;
+ this.anim={name:n,start:performance.now()/1000,dur:dur};
+};
+Mico.prototype.animU=function(now){return this.anim?Math.min(1,(now-this.anim.start)/this.anim.dur):null};
+Mico.prototype.tick=function(now,dt){
+ if(this.moodUntil&&now>this.moodUntil){this.mood=this.baseMood;this.moodUntil=0}
+ if(now>this.blinkAt){this.blinkStart=now;this.blinkUntil=now+0.2;this.blinkAt=now+rnd(3,6)}
+ var close=now<this.blinkUntil?pulse((now-this.blinkStart)/0.2,0,1):0;
+ if(this.anim&&this.anim.name==="blink2"){var u=Math.min(1,(now-this.anim.start)/this.anim.dur);close=Math.max(close,Math.max(pulse(u,0,.3),pulse(u,.4,.7)))}
+ this.lid=1-0.92*close;
+ if(this.anim&&now>this.anim.start+this.anim.dur)this.anim=null;
+ if(!this.anim&&this.mood==="idle"&&now>this.nextIdle){
+  var a=["lookaround","blink2","wink","headtilt"];this.startAnim(a[(Math.random()*a.length)|0]);this.nextIdle=now+rnd(8,16)}
+ if(this.jh>0||this.jv!==0){this.jv-=900*dt;this.jh+=this.jv*dt;
+  if(this.jh<=0&&this.jv<0){if(this.jv<-120)this.squashV+=0.6;this.jh=this.jv=0}}
+ var mood=this.eMood();
+ var goal=(TILT[mood]||0);this.tilt+=(clamp(goal,-HEAD_MAX,HEAD_MAX)-this.tilt)*(1-Math.exp(-dt*7));
+ var ex=function(r){return 1-Math.exp(-dt*r)};
+ var b=this.brow;
+ if(now>=b.until){var amp=0.35;b.gl=rnd(-0.03,0.055)*amp;b.gr=rnd(-0.03,0.055)*amp;b.gtl=rnd(-0.03,0.03)*amp;b.gtr=rnd(-0.03,0.03)*amp;b.until=now+rnd(2,5)}
+ var kb=ex(9);b.l+=(b.gl-b.l)*kb;b.r+=(b.gr-b.r)*kb;b.tl+=(b.gtl-b.tl)*kb;b.tr+=(b.gtr-b.tr)*kb;
+ var f=this.face;
+ if(now>=f.until){var g=0.05;f.gx=rnd(-g,g);f.gy=rnd(-g*0.8,g*0.6);f.until=now+rnd(1.2,3)}
+ var kf=ex(2.2);f.dx+=(f.gx-f.dx)*kf;f.dy+=(f.gy-f.dy)*kf;
+ this.squashV+=(-60*this.squash-8*this.squashV)*dt;this.squash+=this.squashV*dt;
+};
+Mico.prototype.eMood=function(){return this.mood};
+Mico.prototype.look=function(fxs,fys,R,mood,u,anim,now){
+ var vx=0,vy=0;
+ if(anim==="headtilt"&&u!==null){vx=-this.tiltDir*R*0.05*Math.sin(Math.PI*u);vy=-R*0.01}
+ else if(mood==="thinking"){vx=R*0.04*Math.sin(now*2);vy=-R*0.05}
+ else if(anim==="lookaround"&&u!==null){vx=Math.sin(u*TAU*1.5)*R*0.05}
+ else if(mood==="curious"){vx=R*0.03;vy=-R*0.01}
+ else if(this.px!==null){
+  var r=this.cv.getBoundingClientRect(),sc=r.width/this.size;
+  var dx=(this.px-(r.left+fxs*sc)),dy=(this.py-(r.top+fys*sc));
+  var d=Math.hypot(dx,dy)||1,k=Math.min(d/200,1)*R*0.045/d;vx=dx*k;vy=dy*k;
+ }
+ vx+=(Math.sin(now*1.3)+0.5*Math.sin(now*3.1+1))*R*0.006;vy+=(Math.cos(now*1.7)+0.5*Math.sin(now*2.7))*R*0.005;
+ return [vx,vy];
+};
+Mico.prototype.frame=function(now){
+ var dt=Math.min(0.05,Math.max(0.001,now-this.last));this.last=now;this.tick(now,dt);this.draw(now);
+};
+Mico.prototype.draw=function(now){
+ var c=this.c,S=this.size,sc=S/300,t=now-this.t0;
+ c.setTransform(this.dpr,0,0,this.dpr,0,0);c.clearRect(0,0,S,S);
+ var w=S,cx=w/2,R=w*0.28,cy0=S*0.54,cy=cy0-this.jh*sc;
+ var mood=this.eMood(),u=this.animU(now),anim=this.anim?this.anim.name:null;
+ if(anim==="wink")mood="curious";
+ var speed=mood==="sleepy"?0.6:1,breath=1+0.03*Math.sin(t*1.6*speed);
+ var sx=breath*(1+this.squash),sy=breath*(1-this.squash);
+ cy-=R*0.025*Math.sin(t*1.9);
+ var baseOp=1;
+ if(this.appear){var au=(now-this.appear.start)/this.appear.dur;
+  if(au>=1)this.appear=null;else{var pop=Math.max(0.05,easeOutBack(Math.min(1,au/0.8)));sx*=pop;sy*=pop;baseOp=Math.min(1,au*2.4)}}
+ if(mood==="proud"){sx*=0.97;sy*=1.05}
+ var wob=mood==="thinking"?2.5:1;
+ var shake=mood==="laugh"?Math.sin(t*28)*3:mood==="scared"?Math.sin(t*40)*1.2:0;
+ var sway=Math.sin(t*0.7)*1.8;
+ if(anim==="headtilt"&&u!==null){sway+=this.tiltDir*6*Math.sin(Math.PI*u);mood="curious"}
+ var col=this.col;
+ c.globalAlpha=baseOp;
+ /* тень */
+ c.fillStyle=rgba([120,70,40],Math.max(8,34-this.jh*0.4*sc)/255);
+ c.beginPath();c.ellipse(cx,cy0+R*1.18,R*0.85*sx*(1-this.jh/300),R*0.13,0,0,TAU);c.fill();
+ c.save();c.translate(cx,cy);
+ var head=clamp(this.tilt+sway,-HEAD_MAX,HEAD_MAX);c.rotate((head+shake)*Math.PI/180);c.translate(-cx,-cy);
+ /* форма */
+ c.beginPath();
+ for(var i=0;i<N;i++){var a=TAU*i/N,r=pebble(a,wob,t,0.5),bx=Math.cos(a)*r*1.05,by=Math.sin(a)*r*0.98,x=cx+bx*R*sx,y=cy+by*R*sy;
+  if(i===0)c.moveTo(x,y);else c.lineTo(x,y)}
+ c.closePath();
+ var body=col,glow=mix(body,[255,255,255],0.55);
+ c.lineJoin="round";
+ [[0.34,12],[0.20,20],[0.10,28]].forEach(function(p){c.strokeStyle=rgba(glow,p[1]/255);c.lineWidth=R*p[0];c.stroke()});
+ var pink=[255,160,150];
+ var g=c.createRadialGradient(cx-R*0.15,cy-R*0.2,0,cx-R*0.15,cy-R*0.2,R*1.3);
+ g.addColorStop(0,rgba(mix(body,[255,250,240],0.35),1));g.addColorStop(0.55,rgba(body,1));
+ g.addColorStop(0.85,rgba(mix(body,pink,0.35),1));g.addColorStop(1,rgba(mix(body,pink,0.6),1));
+ c.fillStyle=g;c.fill();
+ c.save();c.clip();
+ var sh=c.createRadialGradient(cx-R*0.45,cy-R*0.6,0,cx-R*0.45,cy-R*0.6,R*0.6);
+ sh.addColorStop(0,"rgba(255,255,255,"+(130/255)+")");sh.addColorStop(1,"rgba(255,255,255,0)");c.fillStyle=sh;c.fillRect(0,0,S,S);
+ var ir=c.createRadialGradient(cx+R*0.85,cy+R*0.6,0,cx+R*0.85,cy+R*0.6,R*0.65);
+ ir.addColorStop(0,"rgba(170,240,220,"+(80/255)+")");ir.addColorStop(1,"rgba(170,240,220,0)");c.fillStyle=ir;c.fillRect(0,0,S,S);
+ c.restore();
+ /* светящийся край: обводка внутри формы */
+ c.save();c.clip();c.strokeStyle="rgba(255,255,255,"+(95/255)+")";c.lineWidth=R*0.08;c.stroke();c.restore();
+ /* лицо */
+ var fx=cx-R*0.12+R*this.face.dx,fy=cy-R*0.16+R*this.face.dy;
+ this.drawFace(c,fx,fy,R,col,mood,t,u,anim,now);
+ c.restore();c.globalAlpha=1;
+};
+Mico.prototype.drawFace=function(c,fx,fy,R,col,mood,t,u,anim,now){
+ var dark=((Math.max(col[0],col[1],col[2])+Math.min(col[0],col[1],col[2]))/2)>110;
+ var ink=dark?"#2a1d1d":"#ffffff",shine=dark?"rgb(255,255,255)":"rgb(40,30,20)";
+ var look=this.look(fx,fy,R,mood,u,anim,now),lw=Math.max(1.6,R*0.03);
+ c.lineCap="round";c.lineJoin="round";
+ /* румянец */
+ c.fillStyle=rgba([255,120,120],((mood==="shy"||mood==="proud")?160:(["happy","love","laugh","excited"].indexOf(mood)>=0)?105:55)/255);
+ [-1,1].forEach(function(s){c.beginPath();c.ellipse(fx+s*R*0.52,fy+R*0.22,R*0.12,R*0.075,0,0,TAU);c.fill()});
+ var self=this,eyeK=1;
+ [-1,1].forEach(function(s){
+  var ex=fx+s*R*0.38+look[0],ey=fy+look[1]+(mood==="shy"?R*0.05:0)-(mood==="confused"&&s===1?R*0.02:0);
+  var ew=R*0.075,eh=R*0.105,squint=mood==="curious"&&s===-1;
+  c.strokeStyle=ink;c.lineWidth=lw;c.fillStyle=ink;
+  if(mood==="sleepy"||(mood==="playful"&&s===1)){c.beginPath();c.moveTo(ex-ew,ey);c.lineTo(ex+ew,ey);c.stroke()}
+  else if(["happy","laugh","love","proud","playful"].indexOf(mood)>=0){c.beginPath();arcQt(c,ex,ey-eh*0.5+eh*0.75,ew*1.15,eh*0.75,0,180);c.stroke()}
+  else if(squint){c.beginPath();c.ellipse(ex,ey+eh*0.2,ew*1.05,eh*0.4,0,0,TAU);c.fill()}
+  else{
+   var big=(mood==="surprised"?1.35:mood==="scared"?1.3:mood==="excited"?1.15:1)*eyeK,sq=mood==="angry"?0.75:1,lid=self.lid;
+   c.beginPath();c.ellipse(ex,ey,ew*big,eh*big*sq*lid,0,0,TAU);c.fill();
+   c.fillStyle=shine;c.beginPath();c.ellipse(ex+ew*0.3,ey-eh*0.3*sq*lid,ew*0.32*big,ew*0.32*big*lid,0,0,TAU);c.fill();
+  }
+  /* брови */
+  var by=ey-R*0.2-look[1]*0.5,so=R*0.01,si=-R*0.005,curve=R*0.045;
+  if(mood==="sad"){so=R*0.03;si=-R*0.05;curve=R*0.012}
+  else if(mood==="worried"){so=R*0.04;si=-R*0.07;curve=R*0.01}
+  else if(mood==="surprised"||mood==="scared"||mood==="excited"){by-=R*(mood==="surprised"||mood==="excited"?0.05:0.07);curve=R*0.06}
+  else if(mood==="angry"){so=-R*0.02;si=R*0.05;curve=R*0.01}
+  else if(mood==="shy"){by+=R*0.02;curve=R*0.02}
+  else if(mood==="confused"&&s===1){by-=R*0.07}
+  else if(mood==="thinking"||mood==="curious"){if(s===1)by-=R*0.06;else if(squint){by+=R*0.03;curve=R*0.01}}
+  var bo=self.brow;by-=R*(s===-1?bo.l:bo.r);var bt=s===-1?bo.tl:bo.tr;so+=R*bt;si-=R*bt;
+  var bl=R*0.09;c.strokeStyle=ink;c.lineWidth=Math.max(1.4,R*0.024);
+  c.beginPath();c.moveTo(ex+s*bl,by+so);c.quadraticCurveTo(ex,by-curve,ex-s*bl,by+si);c.stroke();
+ });
+ /* рот */
+ c.strokeStyle=ink;c.lineWidth=lw;c.fillStyle=ink;
+ var my=fy+R*0.22;
+ if(["happy","love","proud","playful"].indexOf(mood)>=0){c.beginPath();arcQt(c,fx,my-R*0.07+R*0.10,R*0.17,R*0.10,200,140);c.stroke()}
+ else if(mood==="laugh"||mood==="excited"){var bg=mood==="laugh"?1+0.2*Math.sin(t*18):1,rw=mood==="laugh"?R*0.13:R*0.14,rh=mood==="laugh"?R*0.2:R*0.2;
+  c.beginPath();c.ellipse(fx,my-R*0.03+rh*bg/2,rw*bg,rh*bg/2,0,0,Math.PI,false);c.closePath();c.fill()}
+ else if(mood==="sad"){c.beginPath();c.moveTo(fx-R*0.14,my+R*0.1);c.quadraticCurveTo(fx,my-R*0.06,fx+R*0.14,my+R*0.1);c.lineWidth=Math.max(1.2,R*0.03);c.stroke()}
+ else if(mood==="worried"){c.beginPath();c.ellipse(fx,my+R*0.05,R*0.03,R*0.04,0,0,TAU);c.fill()}
+ else if(mood==="angry"){c.beginPath();c.moveTo(fx-R*0.1,my+R*0.02);c.quadraticCurveTo(fx,my+R*0.1,fx+R*0.1,my+R*0.02);c.stroke()}
+ else if(mood==="shy"){c.beginPath();arcQt(c,fx,my-R*0.02+R*0.04,R*0.06,R*0.04,200,140);c.stroke()}
+ else if(mood==="confused"){c.beginPath();for(var i=0;i<9;i++){var x2=fx-R*0.1+i*R*0.025,y2=my+R*0.04+Math.sin(i*1.4)*R*0.012;if(i===0)c.moveTo(x2,y2);else c.lineTo(x2,y2)}c.stroke()}
+ else if(mood==="surprised"){c.beginPath();c.ellipse(fx,my+R*0.05,R*0.04,R*0.058,0,0,TAU);c.fill()}
+ else if(mood==="curious"||mood==="thinking"){c.beginPath();c.moveTo(fx-R*0.05,my+R*0.05);c.lineTo(fx+R*0.09,my+R*0.03);c.stroke()}
+ else if(mood==="sleepy"){var rr=R*(0.03+0.012*Math.sin(t*1.2));c.beginPath();c.ellipse(fx,my+R*0.05,rr,rr*1.2,0,0,TAU);c.stroke()}
+ else{c.beginPath();arcQt(c,fx,my-R*0.04+R*0.06,R*0.1,R*0.06,210,120);c.stroke()}
+};
+window.MicoLive={create:function(cv,o){return new Mico(cv,o)},_Mico:Mico};
+})();
+
+</script>
+<script>
+(function(){
+var doc=document,root=doc.documentElement;
+/* живой Mico из приложения */
+var box=doc.getElementById("pvMico"),cv=doc.getElementById("pvLive"),mico=null;
+if(cv&&window.MicoLive){mico=MicoLive.create(cv,{color:"#FFCFA3",mood:"idle"})}
+if(box&&mico)box.addEventListener("click",function(){mico.jump(300);mico.setMood("happy",2)});
+/* появление блоков при прокрутке */
+var items=[].slice.call(doc.querySelectorAll(".rv"));
+if("IntersectionObserver" in window){
+ var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}})},{threshold:.12,rootMargin:"0px 0px -6% 0px"});
+ items.forEach(function(n){io.observe(n)});
+}else items.forEach(function(n){n.classList.add("in")});
+/* прогресс чтения и активный раздел */
+var prog=doc.getElementById("pvProg"),tick=false;
+function lang(){return root.lang==="en"?"en":"ru"}
+function update(){
+ tick=false;
+ var h=root.scrollHeight-innerHeight,p=h>0?Math.min(1,Math.max(0,scrollY/h)):0;
+ if(prog)prog.style.transform="scaleX("+p.toFixed(4)+")";
+ var l=lang(),secs=[].slice.call(doc.querySelectorAll(".pv-doc ."+l+" .ps")),cur=null,line=innerHeight*.32;
+ secs.forEach(function(s){if(s.getBoundingClientRect().top<=line)cur=s});
+ if(!cur&&secs.length)cur=secs[0];
+ var links=doc.querySelectorAll(".pv-toc nav."+l+" a");
+ links.forEach(function(a){var on=!!(cur&&a.getAttribute("data-t")===cur.id),was=a.classList.contains("on");a.classList.toggle("on",on);
+  if(on&&!was&&innerWidth<=900){var bar=a.closest(".pv-toc");if(bar)bar.scrollTo({left:a.offsetLeft-24,behavior:"smooth"})}});
+}
+function req(){if(!tick){tick=true;requestAnimationFrame(update)}}
+addEventListener("scroll",req,{passive:true});addEventListener("resize",req);
+new MutationObserver(function(){req();setTimeout(req,60)}).observe(root,{attributes:true,attributeFilter:["lang"]});
+update();
+/* мягкий переход между страницами */
+doc.addEventListener("click",function(e){
+ var a=e.target.closest&&e.target.closest("a[href]");if(!a||e.defaultPrevented||e.metaKey||e.ctrlKey||e.shiftKey||a.target)return;
+ var u;try{u=new URL(a.href,location.href)}catch(x){return}
+ if(u.origin!==location.origin||u.pathname===location.pathname||/\.(exe|zip)$/i.test(u.pathname)||a.classList.contains("dl"))return;
+ e.preventDefault();doc.body.classList.add("leaving");setTimeout(function(){location.href=a.href},230)});
+addEventListener("pageshow",function(){doc.body.classList.remove("leaving")});
+})();
+
 </script>
 </body>
 </html>
