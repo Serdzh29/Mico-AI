@@ -32,11 +32,71 @@ footer{border-top:1px solid var(--line);padding:26px 18px calc(30px + env(safe-a
 .en{display:none}html[lang=en] .en{display:revert}html[lang=en] .ru{display:none}
 @media (max-width:520px){.top{gap:8px}.btn.sm{padding:8px 13px}.brand{font-size:16px}.card{padding:18px;border-radius:18px}}
 </style>
+<style id="nf">
+body{background:radial-gradient(1000px 560px at 50% 38%,rgba(255,173,122,.16),transparent 62%),radial-gradient(700px 400px at 90% -10%,rgba(255,207,163,.10),transparent 60%),var(--bg)}
+main.nf{max-width:980px;min-height:calc(100svh - 150px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:clamp(20px,5vw,56px) 20px 30px;position:relative}
+.stars i{position:absolute;width:3px;height:3px;border-radius:50%;background:#ffe7d3;opacity:.0;animation:tw 4s ease-in-out infinite}
+.stars i:nth-child(1){left:12%;top:22%;animation-delay:.2s}.stars i:nth-child(2){left:84%;top:18%;animation-delay:1.4s}.stars i:nth-child(3){left:20%;top:70%;animation-delay:2.1s}
+.stars i:nth-child(4){left:76%;top:64%;animation-delay:.9s}.stars i:nth-child(5){left:48%;top:10%;animation-delay:2.8s}.stars i:nth-child(6){left:92%;top:44%;animation-delay:1.9s}.stars i:nth-child(7){left:6%;top:46%;animation-delay:3.3s}
+@keyframes tw{0%,100%{opacity:0;transform:scale(.6)}50%{opacity:.9;transform:scale(1.4)}}
+.nf-num{display:flex;align-items:center;justify-content:center;gap:clamp(2px,1.5vw,18px);line-height:1;user-select:none}
+.nf-d{font-size:clamp(92px,23vw,230px);font-weight:800;letter-spacing:-.05em;background:linear-gradient(180deg,#ffe7d3 0%,#ffcfa3 45%,#ff9f8a 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 12px 40px rgba(255,173,122,.25))}
+.nf-m{position:relative;width:clamp(96px,24vw,238px);aspect-ratio:1;flex:none}
+.nf-m svg{width:100%;height:100%;overflow:visible;animation:fl 4.6s ease-in-out infinite}
+.nf-sh{position:absolute;left:50%;bottom:-6%;width:56%;height:9%;transform:translateX(-50%);border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),transparent);animation:sh 4.6s ease-in-out infinite}
+@keyframes fl{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-14px) rotate(3deg)}}
+@keyframes sh{0%,100%{transform:translateX(-50%) scale(1);opacity:.9}50%{transform:translateX(-50%) scale(.8);opacity:.55}}
+.nf-eye{transition:transform .08s linear}.nf-lid{transform-box:fill-box;transform-origin:center;animation:bl 5.2s infinite}
+@keyframes bl{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.08)}}
+.nf-q{position:absolute;font-weight:800;color:var(--acc);opacity:0;animation:q 3.6s ease-in-out infinite}
+.nf-q.a{right:-6%;top:-10%;font-size:clamp(22px,4vw,44px)}.nf-q.b{left:-8%;top:6%;font-size:clamp(16px,3vw,30px);animation-delay:1.2s}.nf-q.c{right:-14%;top:34%;font-size:clamp(14px,2.4vw,24px);animation-delay:2.2s}
+@keyframes q{0%{opacity:0;transform:translateY(10px) rotate(-8deg)}35%,65%{opacity:.95}100%{opacity:0;transform:translateY(-16px) rotate(10deg)}}
+.nf h1{margin:clamp(14px,3vw,26px) 0 8px;font-size:clamp(28px,5vw,46px)}
+.nf .lead{max-width:560px;margin:0 auto;color:var(--t2)}
+.nf-btns{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:28px}
+.nf-btns .btn.acc:hover{box-shadow:0 10px 36px -10px rgba(255,173,122,.7);text-decoration:none}
+.nf-links{display:flex;flex-wrap:wrap;gap:8px 22px;justify-content:center;margin-top:30px;padding-top:22px;border-top:1px solid var(--line);width:min(560px,100%);font-size:14px}
+.nf-links a{color:var(--t2)}.nf-links a:hover{color:var(--acc);text-decoration:none}
+@media (prefers-reduced-motion:reduce){.nf-m svg,.nf-sh,.nf-lid,.stars i,.nf-q{animation:none}.nf-q{opacity:.8}}
+</style>
 </head>
 <body>
 <header class="top"><a class="brand" href="./" data-keep="./"><img src="favicon-48.png" alt="" width="26" height="26" style="vertical-align:-6px;margin-right:9px">Mico AI</a><div class="r"><div class="lang"><button data-lang="ru">RU</button><button data-lang="en">EN</button></div><a class="btn acc sm dl" href="Mico.exe"><span class="ru">Скачать</span><span class="en">Download</span></a></div></header>
-<main>
-<div class="ru"><h1>Такой страницы нет</h1><p class="lead">Адрес набран с ошибкой или страница переехала. Вернись на главную или скачай Mico AI.</p></div><div class="en"><h1>Page not found</h1><p class="lead">The address is mistyped or the page has moved. Go back home or download Mico AI.</p></div><p><a class="btn acc" href="./" data-keep="./"><span class="ru">На главную</span><span class="en">Home</span></a></p>
+<main class="nf">
+<div class="stars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<div class="nf-num" aria-hidden="true">
+ <span class="nf-d">4</span>
+ <div class="nf-m" id="nfMico">
+  <span class="nf-q a">?</span><span class="nf-q b">?</span><span class="nf-q c">?</span>
+  <svg viewBox="0 0 200 200" role="img" aria-label="Mico">
+   <defs>
+    <radialGradient id="nb" cx="38%" cy="30%" r="80%"><stop offset="0" stop-color="#fff1e3"/><stop offset=".42" stop-color="#ffcfa3"/><stop offset="1" stop-color="#ff9f6e"/></radialGradient>
+    <radialGradient id="ng" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffad7a" stop-opacity=".45"/><stop offset="1" stop-color="#ffad7a" stop-opacity="0"/></radialGradient>
+   </defs>
+   <circle cx="100" cy="104" r="96" fill="url(#ng)"/>
+   <path d="M100 14c47 0 82 31 82 82 0 54-36 90-82 90S18 150 18 96C18 45 53 14 100 14z" fill="url(#nb)"/>
+   <ellipse cx="68" cy="52" rx="26" ry="14" fill="#fff" opacity=".42" transform="rotate(-24 68 52)"/>
+   <circle cx="50" cy="118" r="13" fill="#ff8a6b" opacity=".32"/><circle cx="150" cy="118" r="13" fill="#ff8a6b" opacity=".32"/>
+   <path d="M58 76q15-11 32-3" fill="none" stroke="#3a2417" stroke-width="5" stroke-linecap="round"/>
+   <path d="M112 68q17-5 32 8" fill="none" stroke="#3a2417" stroke-width="5" stroke-linecap="round"/>
+   <g class="nf-lid"><g class="nf-eye" id="nfL"><ellipse cx="74" cy="100" rx="11" ry="14" fill="#2b1a10"/><circle cx="70" cy="95" r="4" fill="#fff"/></g></g>
+   <g class="nf-lid"><g class="nf-eye" id="nfR"><ellipse cx="126" cy="100" rx="11" ry="14" fill="#2b1a10"/><circle cx="122" cy="95" r="4" fill="#fff"/></g></g>
+   <path d="M82 144q9-9 18 0t18 0" fill="none" stroke="#3a2417" stroke-width="5" stroke-linecap="round"/>
+  </svg>
+  <div class="nf-sh"></div>
+ </div>
+ <span class="nf-d">4</span>
+</div>
+<div class="ru"><h1>Ой, здесь пусто</h1><p class="lead">Mico обыскал всё вокруг, но такой страницы не нашёл. Возможно, адрес набран с ошибкой или страница переехала.</p></div>
+<div class="en"><h1>Oops, nothing here</h1><p class="lead">Mico looked everywhere but could not find this page. The address may be mistyped, or the page has moved.</p></div>
+<div class="nf-btns"><a class="btn acc" href="./" data-keep="./"><span class="ru">На главную</span><span class="en">Back home</span></a>
+<a class="btn dl" href="Mico.exe"><span class="ru">Скачать Mico</span><span class="en">Download Mico</span></a></div>
+<nav class="nf-links" aria-label="Разделы">
+ <a href="./#cloud"><span class="ru">Mico Cloud</span><span class="en">Mico Cloud</span></a>
+ <a href="./#agent"><span class="ru">ИИ-агент</span><span class="en">AI agent</span></a>
+ <a href="./#faq"><span class="ru">Вопросы и ответы</span><span class="en">FAQ</span></a>
+ <a href="versions.html" data-keep="versions.html"><span class="ru">Все версии</span><span class="en">All versions</span></a>
+</nav>
 </main>
 <footer><span>© 2026 Mico AI</span><a href="privacy.html" data-keep="privacy.html"><span class="ru">Политика конфиденциальности</span><span class="en">Privacy policy</span></a><a href="license.html" data-keep="license.html"><span class="ru">Лицензия MIT</span><span class="en">MIT license</span></a><a href="versions.html" data-keep="versions.html"><span class="ru">Все версии</span><span class="en">All versions</span></a><a href="./" data-keep="./"><span class="ru">На главную</span><span class="en">Home</span></a></footer>
 <script>
@@ -50,6 +110,13 @@ document.querySelectorAll(".lang button").forEach(function(b){b.addEventListener
 var L=(q==="en"||q==="ru")?q:((navigator.language||"ru").slice(0,2)==="en"?"en":"ru");set(L);
 var dl=(window.MICOSITE&&MICOSITE.download)||"Mico.exe";document.querySelectorAll("a.dl").forEach(function(a){a.href=a.getAttribute("data-url")||dl});
 if(window.renderReleases)renderReleases(L,set)})();
+</script>
+<script>
+(function(){var L=document.getElementById("nfL"),R=document.getElementById("nfR"),box=document.getElementById("nfMico");if(!L||!box)return;
+function look(x,y){var r=box.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=x-cx,dy=y-cy,d=Math.hypot(dx,dy)||1,k=Math.min(1,d/260),mx=7*k,my=6*k,tx=(dx/d)*mx,ty=(dy/d)*my;
+var t="translate("+tx.toFixed(1)+"px,"+ty.toFixed(1)+"px)";L.style.transform=t;R.style.transform=t}
+addEventListener("pointermove",function(e){look(e.clientX,e.clientY)},{passive:true});
+addEventListener("touchmove",function(e){var t=e.touches[0];if(t)look(t.clientX,t.clientY)},{passive:true})})();
 </script>
 </body>
 </html>
