@@ -1,0 +1,25 @@
+PyQt6>=6.6
+mss>=9.0
+Pillow>=10.0
+pywin32>=306
+psutil>=5.9
+cryptography>=42.0
+requests>=2.31
+# точная громкость
+pycaw>=20240210
+comtypes>=1.4
+# чтение PDF (чистый Python, без системных библиотек)
+pypdf>=4.0
+# голос Mico AI — всё локально, системные голоса Windows не используются
+numpy>=1.26
+onnxruntime>=1.17
+piper-tts>=1.2
+faster-whisper>=1.0
+sounddevice>=0.4.6
+scipy>=1.11          # нужен голосовым движкам (без него голос не запускается: No module named 'scipy')
+llama-cpp-python>=0.3.0
+# UI Automation для мессенджеров и браузера
+pywinauto>=0.6.8
+pyautogui>=0.9.54
+# Edge TTS — облачные голоса Microsoft (требует интернет)
+edge-tts>=6.1.0

@@ -1,0 +1,214 @@
+{
+  "version": 1,
+  "note": "Фиксированный набор русских запросов для сравнения моделей. Не меняй формулировки без причины: иначе результаты разных запусков нельзя сравнивать.",
+  "prompts": [
+    {
+      "id": "act-volume",
+      "category": "action",
+      "prompt": "громкость 30",
+      "expect": "set_volume"
+    },
+    {
+      "id": "act-open",
+      "category": "action",
+      "prompt": "открой блокнот",
+      "expect": "open_app"
+    },
+    {
+      "id": "act-theme",
+      "category": "action",
+      "prompt": "переключи на тёмную тему",
+      "expect": "set_theme"
+    },
+    {
+      "id": "act-bright",
+      "category": "action",
+      "prompt": "сделай яркость 50",
+      "expect": "set_brightness"
+    },
+    {
+      "id": "act-settings",
+      "category": "action",
+      "prompt": "покажи настройки bluetooth",
+      "expect": "open_settings"
+    },
+    {
+      "id": "win-version",
+      "category": "windows",
+      "prompt": "Как посмотреть версию Windows на моём компьютере?",
+      "must": [
+        "Windows|winver|Параметры|Система|версия"
+      ]
+    },
+    {
+      "id": "win-hibernate",
+      "category": "windows",
+      "prompt": "Что такое гибернация в Windows простыми словами?",
+      "must": [
+        "гибернац"
+      ]
+    },
+    {
+      "id": "win-sleep-vs",
+      "category": "windows",
+      "prompt": "Чем спящий режим отличается от гибернации?",
+      "must": [
+        "спящ",
+        "гибернац"
+      ]
+    },
+    {
+      "id": "win-firewall",
+      "category": "windows",
+      "prompt": "Что такое брандмауэр Windows и зачем он нужен?",
+      "must": [
+        "брандмауэр|файрвол|firewall"
+      ]
+    },
+    {
+      "id": "win-restore",
+      "category": "windows",
+      "prompt": "Что такое точка восстановления системы?",
+      "must": [
+        "точк\\w* восстановлен"
+      ]
+    },
+    {
+      "id": "win-wifi",
+      "category": "windows",
+      "prompt": "Wi-Fi пропадает каждые несколько минут. Что проверить?",
+      "must": [
+        "Wi-Fi|вайфай|сет\\w+|драйвер"
+      ]
+    },
+    {
+      "id": "sys-ram-ssd",
+      "category": "system",
+      "prompt": "Объясни разницу между оперативной памятью и SSD.",
+      "must": [
+        "оператив|RAM"
+      ]
+    },
+    {
+      "id": "sys-disk-full",
+      "category": "system",
+      "prompt": "Диск почти полный. Как освободить место?",
+      "must": [
+        "корзин|временн|диск|файл"
+      ]
+    },
+    {
+      "id": "sys-slow-boot",
+      "category": "system",
+      "prompt": "Почему компьютер долго включается? Назови 2–3 частые причины.",
+      "must": [
+        "автозагруз|диск|программ"
+      ]
+    },
+    {
+      "id": "sys-update",
+      "category": "system",
+      "prompt": "Стоит ли ставить обновления Windows сразу после выхода?",
+      "must": [
+        "обновлен"
+      ]
+    },
+    {
+      "id": "sys-error",
+      "category": "system",
+      "prompt": "Что значит синий экран смерти и что делать, если он повторяется?",
+      "must": [
+        "синий|BSOD|экран"
+      ]
+    },
+    {
+      "id": "chat-greet",
+      "category": "chat",
+      "prompt": "Привет! Как твой день?"
+    },
+    {
+      "id": "chat-tired",
+      "category": "chat",
+      "prompt": "Мне сегодня грустно, поддержи меня, пожалуйста."
+    },
+    {
+      "id": "chat-math",
+      "category": "chat",
+      "prompt": "Сколько будет 17 умножить на 23?",
+      "must": [
+        "391"
+      ]
+    },
+    {
+      "id": "chat-translate",
+      "category": "chat",
+      "prompt": "Переведи на английский: «Доброе утро, как дела?»",
+      "must": [
+        "(?i)good morning"
+      ]
+    },
+    {
+      "id": "chat-sky",
+      "category": "chat",
+      "prompt": "Кратко: почему небо голубое?",
+      "must": [
+        "рассеи|свет"
+      ]
+    },
+    {
+      "id": "chat-ai",
+      "category": "chat",
+      "prompt": "Объясни простыми словами, что такое нейросеть.",
+      "must": [
+        "нейрон|данн|обуч|модел"
+      ]
+    },
+    {
+      "id": "chat-code",
+      "category": "chat",
+      "prompt": "Что такое рекурсия? Приведи короткий пример на Python.",
+      "must": [
+        "рекурс",
+        "def "
+      ]
+    },
+    {
+      "id": "chat-name",
+      "category": "chat",
+      "prompt": "Придумай короткое название для кофейни у моря."
+    },
+    {
+      "id": "chat-joke",
+      "category": "chat",
+      "prompt": "Расскажи короткую шутку про программистов."
+    },
+    {
+      "id": "chat-list",
+      "category": "chat",
+      "prompt": "Назови три плюса и три минуса работы из дома, списком."
+    },
+    {
+      "id": "chat-congrats",
+      "category": "chat",
+      "prompt": "Напиши короткое поздравление коллеге с днём рождения."
+    },
+    {
+      "id": "chat-opinion",
+      "category": "chat",
+      "prompt": "Стоит ли начинать учить Python в 30 лет? Коротко, своё мнение."
+    },
+    {
+      "id": "chat-raise",
+      "category": "chat",
+      "prompt": "Как вежливо попросить повышение зарплаты?"
+    },
+    {
+      "id": "chat-ollama",
+      "category": "chat",
+      "prompt": "Что такое Ollama и зачем её запускать на своём компьютере?",
+      "must": [
+        "Ollama|модел"
+      ]
+    }
+  ]
+}

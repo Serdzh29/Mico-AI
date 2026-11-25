@@ -1,0 +1,29 @@
+name: Windows smoke
+
+# Запускается на push и вручную (вкладка Actions → Windows smoke → Run workflow).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Зависимости
+        run: python -m pip install -r requirements.txt
+      - name: Проверки без Windows (tests/run_all.py)
+        run: python tests/run_all.py
+      - name: Дымовой тест Qt (offscreen)
+        run: python tests/smoke_qt.py
+      - name: Сохранить скриншоты и лог
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-output
+          path: smoke_out/
+          if-no-files-found: warn

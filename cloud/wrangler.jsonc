@@ -1,0 +1,18 @@
+{
+  // Сайт и облако Mico AI в одном воркере. Название должно совпадать с воркером mico (адрес mico.ai-off.workers.dev)
+  "name": "mico",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-11-01",
+  "assets": { "directory": "./public", "binding": "ASSETS", "not_found_handling": "404-page", "run_worker_first": ["/api/*"] },
+  "ai": { "binding": "AI" },
+  "durable_objects": { "bindings": [{ "name": "METER", "class_name": "Meter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Meter"] }],
+  "vars": {
+    "CLOUD_ENABLED": "1",
+    "INSTALL_NEURONS_DAY": "1000",
+    "GLOBAL_NEURONS_DAY": "9000",
+    "REGISTER_PER_IP_DAY": "10",
+    "EXT_INSTALL_DAY": "300",
+    "EXT_GLOBAL_DAY": "5000"
+  }
+}
