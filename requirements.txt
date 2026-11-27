@@ -4,7 +4,7 @@ Pillow>=10.0
 pywin32>=306
 psutil>=5.9
 cryptography>=42.0
-requests>=2.31
+requests[socks]>=2.31
 # точная громкость
 pycaw>=20240210
 comtypes>=1.4
@@ -17,9 +17,18 @@ piper-tts>=1.2
 faster-whisper>=1.0
 sounddevice>=0.4.6
 scipy>=1.11          # нужен голосовым движкам (без него голос не запускается: No module named 'scipy')
-llama-cpp-python>=0.3.0
 # UI Automation для мессенджеров и браузера
 pywinauto>=0.6.8
 pyautogui>=0.9.54
 # Edge TTS — облачные голоса Microsoft (требует интернет)
 edge-tts>=6.1.0
+
+# память экрана: Windows OCR (встроенный в Windows 10/11, без интернета)
+winsdk>=1.0.0b10
+
+# Coqui TTS: нейроголоса XTTS v2, русский и английский. Нужны PyTorch и torchaudio (на Windows из PyPI ставится CPU-версия); модель около 2 ГБ скачивается при первом выборе голоса.
+# Лицензия весов XTTS v2 (CPML): только некоммерческое использование. Установка: pip install coqui-tts
+torch>=2.1
+torchaudio>=2.1
+torchcodec>=0.4          # аудио-ввод/вывод PyTorch 2.9+ (нужен coqui-tts[codec])
+coqui-tts[codec]>=0.24                  # голоса Coqui XTTS (входят в сборку exe)
